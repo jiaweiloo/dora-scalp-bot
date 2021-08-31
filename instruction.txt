@@ -1,0 +1,4 @@
+python setup.py install
+
+// remove venv/Lib/site-packages/binance_futures-1.1.0-py3.9.egg
+// remove Binance_futures_python\dist\binance_futures-1.1.0-py3.9.egg
