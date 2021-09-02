@@ -42,7 +42,7 @@ class SignalBot(metaclass=Singleton):
     is_safe_last_trough = False
 
     hit_opposite_rsi = False
-
+    tema_dema_crossed = False
     divergence_counter = 0
 
     def __init__(self, origin):
@@ -98,7 +98,8 @@ class SignalBot(metaclass=Singleton):
                 self.check_divergence(zigzag_indicator, prev_ohlc, self.last_peak, self.last_trough, valid_rsi_target)
                 # self.check_is_hit_opposite_rsi(ohlc)
                 # self.check_is_safe_divergence(ohlc)
-                result = self.check_dema_tema_cross(ohlc)
+                self.check_dema_tema_cross(ohlc)
+                result = self.check_dema_tema_slope_correct(ohlc)
                 # After ending only save the current peak/trough and last peak/trough
                 if valid_rsi_target:
                     if zigzag_indicator == 'peak':
@@ -281,20 +282,50 @@ class SignalBot(metaclass=Singleton):
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED")
-            self.reset_all()
+            self.tema_dema_crossed = True
+            # self.reset_all()
             return divergence_result
         elif self.divergence == "bullish" and ohlc.tema > ohlc.dema:
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED")
+            self.tema_dema_crossed = True
+            # self.reset_all()
+            return divergence_result
+
+    def check_dema_tema_slope_correct(self, ohlc: Ohlc):
+        divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
+
+        if self.divergence == "bearish" and self.tema_dema_crossed is True and \
+                self.candlestick_list[-3].dema > self.candlestick_list[-2].dema > self.candlestick_list[-1].dema:
+            # grad = self.calc_gradient(y0=self.candlestick_list[-1].dema, y1=self.candlestick_list[-3].dema, x0=2, x1=1)
+            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} gradient {grad}")
+            if MODE == EMode.PRODUCTION:
+                ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TEMA GOING DOWN")
             self.reset_all()
             return divergence_result
+        elif self.divergence == "bullish" and self.tema_dema_crossed is True \
+                and self.candlestick_list[-3].dema < self.candlestick_list[-2].dema < self.candlestick_list[-1].dema:
+            # grad = self.calc_gradient(y0=self.candlestick_list[-1].dema, y1=self.candlestick_list[-3].dema, x0=2, x1=1)
+            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} gradient {grad}")
+            if MODE == EMode.PRODUCTION:
+                ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TEMA GOING UP")
+            self.reset_all()
+            return divergence_result
+
+    def calc_gradient(self, y0: float, y1: float, x0: float, x1: float):
+        change_in_y = y0 - y1
+        change_in_x = x0 - x1
+        return change_in_y / change_in_x
 
     def reset_all(self):
         self.point0_price = 0
         self.divergence = None
         self.is_safe_last_peak = False
         self.is_safe_last_trough = False
+        self.tema_dema_crossed = False
 
     async def stream_candles(self, timestamp, timeout_in_sec=0):
         await asyncio.sleep(timeout_in_sec)

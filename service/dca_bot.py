@@ -22,7 +22,8 @@ load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
 EXIT_PRICE_BUFFER = .0005
 
-STOP_LOSS_PERCENT = 1
+STOP_LOSS_PERCENT = 1.5
+
 
 class DcaBot:
     dora_trade_transaction: DoraTradeTransaction
@@ -121,7 +122,6 @@ class DcaBot:
         self.check_hit_stop_loss(current_price)
         self.check_price_hit_target_profit(current_price)
 
-
     def trigger_base_order(self, current_price):
         if self.base_order_complete:
             return
@@ -155,12 +155,12 @@ class DcaBot:
             self.close_short_position(current_price, 100)
             self.reset_all()
 
-        # if self.divergence == "bullish" and self.current_ohlc.rsi > 70:
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and self.current_ohlc.rsi < 30:
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
+        if self.divergence == "bullish" and self.current_ohlc.rsi > 70:
+            self.close_long_position(current_price, 100)
+            self.reset_all()
+        elif self.divergence == "bearish" and self.current_ohlc.rsi < 30:
+            self.close_short_position(current_price, 100)
+            self.reset_all()
         #
         # if self.divergence == "bullish" and self.current_ohlc.tema < self.current_ohlc.dema:
         #     self.close_long_position(current_price, 100)
@@ -185,6 +185,15 @@ class DcaBot:
             self.close_short_position(current_price, 100)
             self.reset_all()
 
+        # if self.divergence == "bullish" and current_price < self.current_ohlc.dema and current_price < self.current_ohlc.lband:
+        #     logger.info("STOP LOSS! BELOW DEMA")
+        #     self.close_long_position(current_price, 100)
+        #     self.reset_all()
+        # elif self.divergence == "bearish" and current_price > self.current_ohlc.dema and current_price > self.current_ohlc.hband:
+        #     logger.info("STOP LOSS! ABOVE DEMA")
+        #     self.close_short_position(current_price, 100)
+        #     self.reset_all()
+
         # if self.divergence == "bullish" and current_price < self.current_ohlc.lband:
         #     logger.info(f"STOP LOSS HIT BB! {self.current_ohlc.lband=}")
         #     self.close_long_position(current_price, 100)
@@ -203,7 +212,6 @@ class DcaBot:
         #     self.close_short_position(current_price, 100)
         #     self.reset_all()
 
-
         # if self.divergence == "bullish" and current_price < self.start_price:
         #     self.close_long_position(current_price, 100)
         #     self.reset_all()
@@ -213,6 +221,8 @@ class DcaBot:
 
     def reset_all(self):
         self.divergence = None
+        if MODE == EMode.TEST:
+            self.dora_trade_transaction.end_time = self.date
         wallet.end_trade(self.cumulative_pnl, self.dora_trade_transaction)
         ee.emit(Trade.STOP_TRADE, self._id)
 

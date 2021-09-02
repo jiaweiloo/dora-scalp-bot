@@ -22,7 +22,7 @@ def first(iterable, default=None):
 
 class Wallet(metaclass=Singleton):
 
-    overall_wallet_fund = 230
+    overall_wallet_fund = 1000
     starting_amount = 0
     tradeable_amount = 0
 
@@ -73,6 +73,7 @@ class Wallet(metaclass=Singleton):
             self.losing_trade += 1
         msg = (f"END OF TRANSACTION REPORT\n"
                f"===========================\n"
+               f"{'date':<14}: {dora_trade_transaction.end_time:%Y-%m-%d %H:%M:%S}\n"
                f"{'cumulative pnl':<14}: {self.cumulative_pnl:.4f} USD\n"
                f"{'overall fund':<14}: {self.overall_wallet_fund:.4f} USD\n"
                f"{'overall pnl(%)':<14}: {self.pnl_percentage:.4f}%\n"
