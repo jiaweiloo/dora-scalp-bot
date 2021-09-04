@@ -281,61 +281,37 @@ class SignalBot(metaclass=Singleton):
             return divergence_result
 
     def check_dema_tema_cross(self, ohlc: Ohlc):
-        divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
-
         # Exit if re crossed
         if self.divergence == "bearish":
             if not self.tema_dema_crossed and ohlc.tema < ohlc.dema:
-                if MODE == EMode.PRODUCTION:
-                    ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED")
                 self.tema_dema_crossed = True
-                # self.reset_all()
-                return divergence_result
             elif self.tema_dema_crossed and ohlc.tema > ohlc.dema:
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMATEMA RECROSSED INVALIDATE")
-                self.reset_all()
+                self.reset_all(is_invalidate=True)
         elif self.divergence == "bullish":
             if not self.tema_dema_crossed and ohlc.tema > ohlc.dema:
-                if MODE == EMode.PRODUCTION:
-                    ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED")
                 self.tema_dema_crossed = True
-                # self.reset_all()
-                return divergence_result
             elif self.tema_dema_crossed and ohlc.tema < ohlc.dema:
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMATEMA RECROSSED INVALIDATE")
-                self.reset_all()
+                self.reset_all(is_invalidate=True)
 
     def check_dema_tema_slope_correct(self, ohlc: Ohlc):
-        divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
 
         if self.temadema_slopped or not self.tema_dema_crossed:
             return
 
         if self.divergence == "bearish" \
                 and self.candlestick_list[-3].dema > self.candlestick_list[-2].dema > self.candlestick_list[-1].dema:
-            # grad = self.calc_gradient(y0=self.candlestick_list[-1].dema, y1=self.candlestick_list[-3].dema, x0=2, x1=1)
-            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} gradient {grad}")
-            if MODE == EMode.PRODUCTION:
-                ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TEMA GOING DOWN")
-            # self.reset_all()
             self.temadema_slopped = True
-            return divergence_result
         elif self.divergence == "bullish" \
                 and self.candlestick_list[-3].dema < self.candlestick_list[-2].dema < self.candlestick_list[-1].dema:
-            # grad = self.calc_gradient(y0=self.candlestick_list[-1].dema, y1=self.candlestick_list[-3].dema, x0=2, x1=1)
-            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} gradient {grad}")
-            if MODE == EMode.PRODUCTION:
-                ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TEMA GOING UP")
-            # self.reset_all()
             self.temadema_slopped = True
-            return divergence_result
 
     def check_rsi_retest(self, ohlc: Ohlc):
-
         if not self.temadema_slopped or self.rsi_retest_complete:
             return
 
@@ -379,7 +355,13 @@ class SignalBot(metaclass=Singleton):
         change_in_x = x0 - x1
         return change_in_y / change_in_x
 
-    def reset_all(self):
+    def reset_all(self, is_invalidate=False):
+        if is_invalidate:
+            msg = (f"SIGNALS INVALIDATED\n"
+                   f"{self.divergence} divergence\n"                
+                   f"Divergence count: {self.divergence_counter}")
+            logger.info(msg)
+            telegram_bot.send_message(message=msg)
         self.point0_price = 0
         self.divergence = None
         self.is_safe_last_peak = False
