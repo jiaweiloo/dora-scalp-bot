@@ -194,7 +194,7 @@ async def main():
         with ThreadPoolExecutor(max_workers=1) as executor:
             event_loop = asyncio.get_event_loop()
             await asyncio.gather(controller.run_signal_bot(),
-                                 # event_loop.run_in_executor(executor, telegram_bot.run_bot)
+                                 event_loop.run_in_executor(executor, telegram_bot.run_bot)
                                  )
     elif MODE == EMode.TEST:
         controller.read_filepath_or_buffer()
