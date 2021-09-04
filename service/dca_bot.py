@@ -1,5 +1,6 @@
 import asyncio
 from functools import reduce
+from operator import itemgetter
 from uuid import uuid4
 
 import math
@@ -273,9 +274,24 @@ class DcaBot:
 
     def reset_all(self):
         self.divergence = None
+        asset, fee, fee_in_usdt = itemgetter('asset', 'fee', 'fee_in_usdt')(self.calc_fee())
+        pnl = self.cumulative_pnl - fee_in_usdt
+        pnl_percentage = pnl / self.trade_bot_balance * 100
+
         if MODE == EMode.TEST:
             self.dora_trade_transaction.end_time = self.date
-        wallet.end_trade(self.cumulative_pnl, self.dora_trade_transaction)
+
+        msg = (f"END TRADE REPORT\n"
+               f"==============================\n"
+               f"{'_id':<12}: {self._id}\n"              
+               f"{'pnl':<12}: {pnl:.2f} USD\n"
+               f"{'pnl(%)':<12}: {pnl_percentage:.4f}%\n"
+               f"{'trade wallet bal':<12}: {self.trade_bot_balance:.2f} USD\n"
+               f"{'fee':<12}: {fee:.4f} {asset.upper()}; {fee_in_usdt:.4f} USD\n"
+               f"==============================\n")
+        logger.info(msg)
+        telegram_bot.send_message(message=msg)
+        wallet.end_trade(pnl, self.dora_trade_transaction)
         ee.emit(Trade.STOP_TRADE, self._id)
 
     def stats_requested(self, chat_id):
@@ -418,6 +434,9 @@ class DcaBot:
         """
         :returns: asset=token name; fee=sum of asset; asset_price=price of token in USDT
         """
+        if IS_PAPER_TRADING:
+            return {'asset': 'usdt', 'fee': 0.0, 'fee_in_usdt': 0.0}
+
         trade_start_time = self.fee_items['trade_start_time']
         retry_limit = 3
         while True:
