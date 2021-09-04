@@ -21,7 +21,6 @@ def first(iterable, default=None):
 
 
 class Wallet(metaclass=Singleton):
-
     overall_wallet_fund = 1000
     starting_amount = 0
     tradeable_amount = 0
@@ -32,6 +31,9 @@ class Wallet(metaclass=Singleton):
     active_trade = 0
     winning_trade = 0
     losing_trade = 0
+
+    total_losing_usdt = 0
+    total_losing_pct = 0
 
     def __init__(self):
         if not IS_PAPER_TRADING:
@@ -65,12 +67,15 @@ class Wallet(metaclass=Singleton):
             self.overall_wallet_fund = usdt_ibalance_object['availableBalance']
             self.cumulative_pnl = self.overall_wallet_fund - self.starting_amount
 
+        prev_percentage = self.pnl_percentage
         self.pnl_percentage = self.cumulative_pnl / self.starting_amount * 100
         self.total_completed_trade += 1
         if final_pnl >= 0:
             self.winning_trade += 1
         else:
             self.losing_trade += 1
+            self.total_losing_usdt += final_pnl
+            self.total_losing_pct += (prev_percentage - self.pnl_percentage)
 
         if dora_trade_transaction.end_time is None:
             dora_trade_transaction.end_time = datetime.now()
@@ -81,8 +86,10 @@ class Wallet(metaclass=Singleton):
                f"{'cumulative pnl':<14}: {self.cumulative_pnl:.4f} USD\n"
                f"{'overall fund':<14}: {self.overall_wallet_fund:.4f} USD\n"
                f"{'overall pnl(%)':<14}: {self.pnl_percentage:.4f}%\n"
-               f"{'total losing trade':<14}: {self.losing_trade}\n"
                f"{'total completed trade':<14}: {self.total_completed_trade}\n"
+               f"{'total losing trade':<14}: {self.losing_trade}\n"
+               f"{'total losing usdt':<14}: {self.total_losing_usdt:.4f} USD\n"
+               f"{'total losing (%)':<14}: -{self.total_losing_pct:.4f} %\n"
                f"{'active trade':<14}: {self.active_trade}\n"
                f"{'leverage':<14}: {TRADE_LEVERAGE}\n"
                f"===========================\n")
@@ -134,7 +141,7 @@ class Wallet(metaclass=Singleton):
                                                             x['positionSide'] == position_side))
         return position
 
-    def open_long_position(self, quantity_in_coin: float):
+    def open_long_position(self, quantity_in_coin: float, order_id: str = None):
         retry = 0
         quantity_in_coin = TRADE_LEVERAGE * quantity_in_coin
         print(f"open_long_position {quantity_in_coin:.3f}")
@@ -143,7 +150,7 @@ class Wallet(metaclass=Singleton):
                 exchange.post_order(side=OrderSide.BUY, position_side=PositionSide.LONG,
                                     order_type=OrderType.MARKET, quantity=f"{quantity_in_coin:.0f}", price=None,
                                     stop_price=None, close_position=None, activation_price=None,
-                                    callback_rate=None, working_type=WorkingType.MARK_PRICE)
+                                    callback_rate=None, working_type=WorkingType.MARK_PRICE, order_id=order_id)
             except Exception as ex:
                 logger.error(f"open_long_position() failed {retry}...\n"
                              f"{ex}")
@@ -152,7 +159,7 @@ class Wallet(metaclass=Singleton):
                 continue
             break
 
-    def close_long_position(self, position_amt: float):
+    def close_long_position(self, position_amt: float, order_id: str = None):
         position_amt = TRADE_LEVERAGE * position_amt
         print(f"close_long_pos {position_amt:.3f}")
         retry = 0
@@ -160,7 +167,8 @@ class Wallet(metaclass=Singleton):
             try:
                 exchange.post_order(side=OrderSide.SELL, position_side=PositionSide.LONG, order_type=OrderType.MARKET,
                                     quantity=f"{position_amt:.3f}", price=None, stop_price=None, close_position=None,
-                                    activation_price=None, callback_rate=None, working_type=WorkingType.MARK_PRICE)
+                                    activation_price=None, callback_rate=None, working_type=WorkingType.MARK_PRICE,
+                                    order_id=order_id)
             except Exception as ex:
                 logger.error(f"close_long_position() failed {retry}...\n"
                              f"{ex}")
@@ -169,7 +177,7 @@ class Wallet(metaclass=Singleton):
                 continue
             break
 
-    def open_short_position(self, quantity_in_coin: float):
+    def open_short_position(self, quantity_in_coin: float, order_id: str = None):
         quantity_in_coin = TRADE_LEVERAGE * quantity_in_coin
         print(f"open_short_position {quantity_in_coin:.3f}")
         retry = 0
@@ -178,7 +186,7 @@ class Wallet(metaclass=Singleton):
                 exchange.post_order(side=OrderSide.SELL, position_side=PositionSide.SHORT, order_type=OrderType.MARKET,
                                     quantity=f"{quantity_in_coin:.3f}", price=None, stop_price=None,
                                     close_position=None, activation_price=None, callback_rate=None,
-                                    working_type=WorkingType.MARK_PRICE)
+                                    working_type=WorkingType.MARK_PRICE, order_id=order_id)
             except Exception as ex:
                 logger.error(f"open_short_position() failed {retry}...\n"
                              f"{ex}")
@@ -187,7 +195,7 @@ class Wallet(metaclass=Singleton):
                 continue
             break
 
-    def close_short_position(self, position_amt: float):
+    def close_short_position(self, position_amt: float, order_id: str = None):
         position_amt = TRADE_LEVERAGE * position_amt
         print(f"close_short_position {position_amt:.3f}")
         retry = 0
@@ -196,7 +204,7 @@ class Wallet(metaclass=Singleton):
                 exchange.post_order(side=OrderSide.BUY, position_side=PositionSide.SHORT, order_type=OrderType.MARKET,
                                     quantity=f"{abs(position_amt):.3f}", price=None, stop_price=None,
                                     close_position=None, activation_price=None, callback_rate=None,
-                                    working_type=WorkingType.MARK_PRICE)
+                                    working_type=WorkingType.MARK_PRICE, order_id=order_id)
             except Exception as ex:
                 logger.error(f"close_short_position() failed {retry}...\n"
                              f"{ex}")

@@ -21,6 +21,33 @@ class ICandlestick(TypedDict):
     rsi: float
 
 
+class IAccountTrade(TypedDict):
+    commission: float
+    commissionAsset: str
+    counterPartyId: None
+    id: int
+    isBuyer: bool
+    isMaker: bool
+    json_parse: Callable
+    orderId: int
+    price: float
+    qty: float
+    quoteQty: float
+    realizedPnl: float
+    side: OrderSide
+    symbol: str
+    time: int
+
+
+class IMarkPrice(TypedDict):
+    json_parse: Callable
+    lastFundingRate: float
+    markPrice: float
+    nextFundingTime: int
+    symbol: str
+    time: int
+
+
 class IPosition(TypedDict):
     symbol: str
     positionAmt: float
@@ -213,3 +240,4 @@ class IUserDataOrderTradeUpdate(TypedDict):
 class EToken:
     MATIC_USDT = 'maticusdt'
     BTC_USDT = 'btcusdt'
+    AVAX_USDT = 'avaxusdt'

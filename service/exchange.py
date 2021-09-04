@@ -1,8 +1,7 @@
 """Signal bot class"""
 import os
-from typing import List
+from typing import List, Union
 
-from binance_f.model import IncomeType
 from dotenv import load_dotenv
 
 from Binance_futures_python.binance_f import RequestClient
@@ -13,8 +12,9 @@ from Binance_futures_python.binance_f.subscriptionclient import SubscriptionClie
 from classes.singleton import Singleton
 from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick, IPostOrder, IAggregateTradeEvent, IPosition, \
-    IBalance, ICandlestickEvent, ICancelAllOrders, IOrder
-from settings import SYMBOL, INTERVAL, EXCHANGE_MODE
+    IBalance, ICandlestickEvent, ICancelAllOrders, IOrder, IUserDataAccountUpdate, IUserDataOrderTradeUpdate, \
+    IAccountTrade, IMarkPrice
+from settings import EXCHANGE_MODE, SYMBOL, INTERVAL
 from utils.events import ee, EExchange
 
 load_dotenv()
@@ -28,18 +28,27 @@ class Exchange(metaclass=Singleton):
     def __init__(self, api_key, secret_key):
         self.req_client = RequestClient(api_key=api_key, secret_key=secret_key)
         if EXCHANGE_MODE == EMode.PRODUCTION:
+            # self.listen_key = self.req_client.start_user_data_stream()
             self.sub_client = SubscriptionClient(api_key=api_key, secret_key=secret_key)
             self.sub_client.subscribe_aggregate_trade_event(SYMBOL, Exchange.on_aggregate_trade_event,
                                                             Exchange.error)
-            self.sub_client.subscribe_candlestick_event(SYMBOL, CandlestickInterval.MIN5,
-                                                        Exchange.on_candlestick_event, Exchange.error)
+            self.sub_client.subscribe_candlestick_event(SYMBOL, INTERVAL, Exchange.on_candlestick_event, Exchange.error)
+            # self.sub_client.subscribe_user_data_event(self.listen_key, ExchangeBot.on_user_data_event, ExchangeBot.error)
 
-    def get_candlestick(self, start_time=None, end_time=None, limit=10) \
-            -> List[ICandlestick]:
+    def get_candlestick(self, interval=CandlestickInterval.MIN1, start_time=None,
+                        end_time=None, limit=10, symbol=SYMBOL) -> List[ICandlestick]:
         """Return a list of dictionary of type ICandlestick"""
-        result = self.req_client.get_candlestick_data(symbol=SYMBOL, interval=INTERVAL, startTime=start_time,
+        result = self.req_client.get_candlestick_data(symbol=symbol, interval=interval, startTime=start_time,
                                                       endTime=end_time, limit=limit)
         return Exchange.parse_obj_list_to_dict_list(result)
+
+    def get_account_trade_list(self, start_time: int = None, end_time: int = None) -> List[IAccountTrade]:
+        result = self.req_client.get_account_trades(symbol=SYMBOL, startTime=start_time, endTime=end_time)
+        return Exchange.parse_obj_list_to_dict_list(result)
+
+    def get_mark_price(self, symbol) -> IMarkPrice:
+        result = self.req_client.get_mark_price(symbol)
+        return Exchange.parse_obj_to_dict(result)
 
     def get_position(self) -> List[IPosition]:
         """Return a list of dictionary of type IPosition"""
@@ -71,38 +80,30 @@ class Exchange(metaclass=Singleton):
         result = self.req_client.cancel_all_orders(symbol=SYMBOL)
         return Exchange.parse_obj_to_dict(result)
 
-    def post_order(self, side: OrderSide, position_side: PositionSide, order_type: OrderType, quantity: str = None,
-                   price: float = None, stop_price: float = None, close_position: bool = None,
-                   activation_price: float = None, callback_rate: float = None,
-                   working_type: WorkingType = WorkingType.MARK_PRICE) -> IPostOrder:
+    def post_order(self, side: OrderSide, positionSide: PositionSide, ordertype: OrderType, quantity: str = None,
+                   price: float = None, stopPrice: float = None, closePosition: bool = None,
+                   activationPrice: float = None, callbackRate: float = None,
+                   workingType: WorkingType = WorkingType.MARK_PRICE, order_id: str = None) -> IPostOrder:
         """
         Return a dictionary of type IPostOrder
         :param side: OrderSide.BUY/SELL/BOTH/INVALID
-        :param position_side: str; PositionSide.LONG/SHORT/BOTH/INVALID
-        :param order_type: OrderType.LIMIT/MARKET/STOP/STOP_MARKET/TAKE_PROFIT/TAKE_PROFIT_MARKET/TRAILING_STOP_MARKET/INVALID
+        :param positionSide: str; PositionSide.LONG/SHORT/BOTH/INVALID
+        :param ordertype: OrderType.LIMIT/MARKET/STOP/STOP_MARKET/TAKE_PROFIT/TAKE_PROFIT_MARKET/TRAILING_STOP_MARKET/INVALID
         :param quantity: float; Cannot be sent with closePosition=True
         :param price: float;
-        :param stop_price: float; Used with OrderType.STOP/STOP_MARKET or OrderType.TAKE_PROFIT/TAKE_PROFIT_MARKET orders
-        :param close_position: bool; Close all positions. Used with OrderType.STOP_MARKET/TAKE_PROFIT_MARKET
-        :param activation_price: float;
-        :param callback_rate: float;
-        :param working_type: stopPrice triggered by: WorkingType.MARK_PRICE/CONTRACT_PRICE/INVALID
+        :param stopPrice: float; Used with OrderType.STOP/STOP_MARKET or OrderType.TAKE_PROFIT/TAKE_PROFIT_MARKET orders
+        :param closePosition: bool; Close all positions. Used with OrderType.STOP_MARKET/TAKE_PROFIT_MARKET
+        :param activationPrice: float;
+        :param callbackRate: float;
+        :param workingType: stopPrice triggered by: WorkingType.MARK_PRICE/CONTRACT_PRICE/INVALID
+        :param order_id: str;
         """
-        result = self.req_client.post_order(symbol=SYMBOL, side=side, positionSide=position_side,
-                                            ordertype=order_type, quantity=quantity, price=price, stopPrice=stop_price,
-                                            closePosition=close_position, activationPrice=activation_price,
-                                            callbackRate=callback_rate, workingType=working_type)
+        result = self.req_client.post_order(symbol=SYMBOL, side=side, positionSide=positionSide,
+                                            ordertype=ordertype, quantity=quantity, price=price, stopPrice=stopPrice,
+                                            closePosition=closePosition, activationPrice=activationPrice,
+                                            callbackRate=callbackRate, workingType=workingType,
+                                            newClientOrderId=order_id)
         return Exchange.parse_obj_to_dict(result)
-
-    def get_income_history(self,
-                           incomeType: IncomeType = None,
-                           startTime: int = None,
-                           endTime: int = None,
-                           limit: int = None,
-                           symbol=SYMBOL):
-        result = self.req_client.get_income_history(symbol=symbol, incomeType=incomeType,
-                                                    startTime=startTime, endTime=endTime, limit=limit)
-        return (result)
 
     @staticmethod
     def on_aggregate_trade_event(data_type: SubscribeMessageType, event: any):
@@ -117,6 +118,23 @@ class Exchange(metaclass=Singleton):
         if data_type == SubscribeMessageType.PAYLOAD:
             _dict: ICandlestickEvent = Exchange.parse_obj_to_dict(event)
             ee.emit(EExchange.CANDLESTICK_EVENT, _dict)
+
+    @staticmethod
+    def on_user_data_event(data_type: SubscribeMessageType, event: any):
+        """Emit an event of type EExchange.USER_DATA_EVENT with value of type Union[IUserDataAccountUpdate,
+        IUserDataOrderTradeUpdate] """
+        if data_type == SubscribeMessageType.PAYLOAD:
+            if event.eventType == "listenKeyExpired":
+                print("Event: ", event.eventType)
+                print("Event time: ", event.eventTime)
+                print("CAUTION: YOUR LISTEN-KEY HAS BEEN EXPIRED!!!")
+            else:
+                _dict: Union[IUserDataAccountUpdate, IUserDataOrderTradeUpdate] = Exchange.parse_obj_to_dict(event)
+                ee.emit(EExchange.USER_DATA_EVENT, _dict)
+
+    # @set_interval(300)
+    # async def renew_user_data_listen_key_validity(self):
+    #     self.listen_key = self.req_client.start_user_data_stream()
 
     @staticmethod
     def error(e: BinanceApiException):

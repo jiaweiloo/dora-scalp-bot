@@ -1,22 +1,27 @@
 import asyncio
+from functools import reduce
+from uuid import uuid4
+
 import math
 import os
 
-import time
+from time import sleep
 from datetime import datetime
 from typing import Literal, Union, List
-import pytz
 from dotenv import load_dotenv
 
 from classes.ohlc import Ohlc
 from custom_types.controller_type import EMode
-from custom_types.exchange_type import ICandlestick, ICandlestickEvent, ICandlestickEventData
+from custom_types.exchange_type import ICandlestick, ICandlestickEvent, ICandlestickEventData, IAccountTrade
+from custom_types.trade_type import ICalcFee, IFeeCalc
 from database.dora_trade_transaction import DoraTradeTransaction
+from service.exchange import exchange
 from service.logging import dca_bot_logger as logger
 from service.telegram_bot import telegram_bot
 from service.wallet import wallet
 from settings import IS_PAPER_TRADING, SYMBOL, INTERVAL, MODE
 from utils.events import ee, Trade, TelegramEventType, EExchange
+from utils.general_utils import time_now_in_ms
 
 load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
@@ -44,6 +49,8 @@ class DcaBot:
     prev_ohlc: Ohlc = None
     retest_ohlc: Ohlc = None
     entry_price_stoploss = False
+
+    fee_items: IFeeCalc = {'trade_start_time': None, 'order_ids': None}
 
     # Test wallet part
     trade_bot_balance = 600
@@ -74,6 +81,7 @@ class DcaBot:
         self.current_ohlc = ohlc
         self.retest_ohlc = prev_ohlc
         self.trade_bot_balance = wallet.get_start_amount()
+        self.fee_items = {'trade_start_time': time_now_in_ms(), 'order_ids': []}
         if self.trade_bot_balance == 0:
             self.divergence = None
             ee.emit(Trade.STOP_TRADE, self._id)
@@ -99,8 +107,8 @@ class DcaBot:
     def on_complete_candlestick_event(self, ohlc: Ohlc):
         self.candlestick_list.append(ohlc)
         self.current_ohlc = ohlc
-        self.check_price_hit_target_profit(self.current_ohlc.close)
-        self.check_hit_stop_loss(self.current_ohlc.close)
+        # self.check_price_hit_target_profit(self.current_ohlc.close)
+        # self.check_hit_stop_loss(self.current_ohlc.close)
         self.candlestick_list = self.candlestick_list[-4:]
         # self.candles_count_passed_entry += 1
 
@@ -157,35 +165,14 @@ class DcaBot:
         if self.divergence is None or len(self.candlestick_list) < 3:
             return
 
-        # if self.divergence == "bullish" and \
-        #         self.candlestick_list[-3].dema > self.candlestick_list[-2].dema > self.candlestick_list[-1].dema:
-        #     logger.info(f"{self.candlestick_list[-3].dema=} > {self.candlestick_list[-1].dema=}")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and \
-        #         self.candlestick_list[-3].dema < self.candlestick_list[-2].dema < self.candlestick_list[-1].dema:
-        #     logger.info(f"{self.candlestick_list[-3].dema=} < {self.candlestick_list[-1].dema=}")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
         price_diff = current_price - self.start_price
         percent_diff = price_diff / self.start_price * 100
 
-        # logger.info(f"{price_diff=} {percent_diff=}")
-        # if self.divergence == "bullish" and current_price < self.current_ohlc.tema:
-        #     logger.info(f"{price_diff=} {percent_diff=}")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and current_price > self.current_ohlc.tema:
-        #     logger.info(f"{price_diff=} {percent_diff=}")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
-        if self.divergence == "bullish" and percent_diff > 0.5:
+        if self.divergence == "bullish" and (percent_diff > 0.5 or current_price > self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
             self.close_long_position(current_price, 100)
             self.reset_all()
-        elif self.divergence == "bearish" and percent_diff < -0.5:
+        elif self.divergence == "bearish" and (percent_diff < -0.5 or current_price < self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
             self.close_short_position(current_price, 100)
             self.reset_all()
@@ -317,7 +304,9 @@ class DcaBot:
         self.full_stables_amt_in_short += collateral_amount
 
         if not IS_PAPER_TRADING:
-            wallet.open_short_position(quantity_in_coin=borrowed_coin_amount)
+            order_id = str(uuid4())
+            self.fee_items['order_ids'].append(order_id)
+            wallet.open_short_position(quantity_in_coin=borrowed_coin_amount, order_id=order_id)
 
         msg = (f"{self.date}\n"
                f"SHORT OPENED\n"
@@ -342,7 +331,9 @@ class DcaBot:
         self.full_stables_amt_in_long = self.stables_amt_in_long
 
         if not IS_PAPER_TRADING:
-            wallet.open_long_position(quantity_in_coin=coin_amount)
+            order_id = str(uuid4())
+            self.fee_items['order_ids'].append(order_id)
+            wallet.open_long_position(quantity_in_coin=coin_amount, order_id=order_id)
 
         msg = (f"{self.date}\n"
                f"LONG OPENED\n"
@@ -372,7 +363,9 @@ class DcaBot:
         self.owed_coin_amount -= coin_amount_to_rebuy
         self.stables_amt_in_short -= value_to_close_in_stables
         if not IS_PAPER_TRADING:
-            wallet.close_short_position(position_amt=coin_amount_to_rebuy)
+            order_id = str(uuid4())
+            self.fee_items['order_ids'].append(order_id)
+            wallet.close_short_position(position_amt=coin_amount_to_rebuy, order_id=order_id)
 
         msg = (f"{self.date} SHORT CLOSED (% of position: {percentage_of_position}%)\n"
                f"--------------------------\n"
@@ -403,7 +396,9 @@ class DcaBot:
         self.cumulative_pnl += pnl
         self.stables_amt_in_long -= value_to_close_in_stables
         if not IS_PAPER_TRADING:
-            wallet.close_long_position(position_amt=coin_amount_to_sell)
+            order_id = str(uuid4())
+            self.fee_items['order_ids'].append(order_id)
+            wallet.close_long_position(position_amt=coin_amount_to_sell, order_id=order_id)
 
         msg = (f"{self.date} LONG CLOSED (% of position: {percentage_of_position}%)\n"
                f"----------------------------\n"
@@ -418,6 +413,35 @@ class DcaBot:
                f"----------------------------\n")
         logger.info(msg)
         telegram_bot.send_message(message=msg)
+
+    def calc_fee(self) -> ICalcFee:
+        """
+        :returns: asset=token name; fee=sum of asset; asset_price=price of token in USDT
+        """
+        trade_start_time = self.fee_items['trade_start_time']
+        retry_limit = 3
+        while True:
+            trades = exchange.get_account_trade_list(trade_start_time)
+            if len(trades) == 0:
+                retry_limit -= 1
+            if retry_limit <= 0 or len(trades):
+                break
+            sleep(5)
+        order_ids = self.fee_items['order_ids']
+
+        def get_by_order_id(trade: IAccountTrade) -> bool:
+            return trade['orderId'] in order_ids
+
+        def sum_fees(acc: float, trade: IAccountTrade) -> float:
+            return acc + trade['commission']
+
+        asset = trades[0]['commissionAsset'] if len(trades) else 'None'
+        fee: float = reduce(sum_fees, filter(get_by_order_id, trades), .0)
+        fee_in_usdt = fee
+        if asset and 'usdt' not in asset.lower():
+            mark_price_obj = exchange.get_mark_price(f'{asset}usdt')
+            fee_in_usdt = mark_price_obj['markPrice'] * fee
+        return {'asset': asset, 'fee': fee, 'fee_in_usdt': fee_in_usdt}
 
     def get_id(self):
         return self._id

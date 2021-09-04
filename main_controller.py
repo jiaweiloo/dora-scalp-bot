@@ -78,7 +78,7 @@ class Controller:
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 1, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 20, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
                 candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],
