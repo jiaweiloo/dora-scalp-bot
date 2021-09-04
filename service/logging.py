@@ -1,6 +1,12 @@
 import logging
+import os
+
+from dotenv import load_dotenv
 
 from utils.path_utils import build_path
+
+load_dotenv()
+BOT_NAME = os.getenv('BOT_NAME')
 
 
 def setup_logging():
@@ -10,7 +16,7 @@ def setup_logging():
     logging.getLogger('apscheduler.executors.default').propagate = False
 
     formatter = logging.Formatter('%(asctime)s [%(name)-12.12s] %(levelname)s : %(message)s')
-    file_handler = logging.FileHandler(build_path(['logs', 'dorabot.log']), encoding='utf-8')
+    file_handler = logging.FileHandler(build_path(['logs', f'{BOT_NAME}.log']), encoding='utf-8')
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(formatter)
     stream_handler = logging.StreamHandler()
