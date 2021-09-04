@@ -71,6 +71,10 @@ class Wallet(metaclass=Singleton):
             self.winning_trade += 1
         else:
             self.losing_trade += 1
+
+        if dora_trade_transaction.end_time is None:
+            dora_trade_transaction.end_time = datetime.now()
+
         msg = (f"END OF TRANSACTION REPORT\n"
                f"===========================\n"
                f"{'date':<14}: {dora_trade_transaction.end_time:%Y-%m-%d %H:%M:%S}\n"
