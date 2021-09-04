@@ -1,8 +1,11 @@
 import logging
+import os
+
 import time
 from datetime import datetime
 from typing import Set
 
+from dotenv import load_dotenv
 from telegram import Update
 from telegram.ext import *
 
@@ -12,8 +15,9 @@ from service.logging import telegram_bot_logger as logger
 from settings import TELEGRAM_MODE
 from utils.events import ee, TelegramEventType
 
-API_KEY = '1945409432:AAFM9Mi-FWKYH4Zj1iNNqscK5nDVYS1Idfc'
-
+load_dotenv()
+TELEGRAM_API_KEY = os.getenv('TELEGRAM_API_KEY')
+DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
 
 class TelegramBot(metaclass=Singleton):
     dispatcher: Dispatcher
@@ -24,7 +28,7 @@ class TelegramBot(metaclass=Singleton):
     def start_bot(self):
         date = datetime.now()
         logger.info(f'{date:%Y-%m-%d %H:%M:%S} > START TELEGRAM_BOT')
-        self.updater = Updater(API_KEY, use_context=True)
+        self.updater = Updater(TELEGRAM_API_KEY, use_context=True)
         self.dispatcher = self.updater.dispatcher
 
         # Commands
@@ -45,9 +49,9 @@ class TelegramBot(metaclass=Singleton):
         self.dispatcher.add_error_handler(self.error)
 
     def start_command(self, update, context):
-        logger.info(update.message.chat.username)
-        logger.info(update.message.chat.id)
-        self.chat_list.add(update.message.chat.id)
+        text = str(update.message.text).lower()
+        logger.info(f'User ({update.message.chat.id}) says: {text}')
+        # self.chat_list.add(update.message.chat.id)
         update.message.reply_text('Hello there! I\'m a bot. What\'s up?')
 
     def stats_command(self, update, context):
@@ -81,7 +85,7 @@ class TelegramBot(metaclass=Singleton):
         # Logs errors
         logger.error(f'Update {update} caused error {context.error}')
 
-    def send_message(self, chat_id=-1001433775775, message="blank"):
+    def send_message(self, chat_id=DEFAULT_TELEGRAM_NOTIFICATION_ID, message="blank"):
         retry = 0
         while True and TELEGRAM_MODE == EMode.PRODUCTION and retry <= 3:
             try:
@@ -98,6 +102,7 @@ class TelegramBot(metaclass=Singleton):
     def run_bot(self):
         # Run the bot
         self.updater.start_polling()
+        # self.updater.idle()
 
 
 telegram_bot = TelegramBot()
@@ -109,6 +114,7 @@ if __name__ == '__main__':
     telegram_bot: TelegramBot = TelegramBot()
     telegram_bot.start_bot()
     msg = "🦺TEST TELEGRAM"
-    telegram_bot.send_message(chat_id=469591760, message=msg)
-    telegram_bot.send_message(chat_id=-1001433775775, message=msg)
+    # telegram_bot.send_message(chat_id=469591760, message=msg)
+    telegram_bot.send_message(chat_id=DEFAULT_TELEGRAM_NOTIFICATION_ID, message=msg)
     logging.info(msg)
+    telegram_bot.run_bot()
