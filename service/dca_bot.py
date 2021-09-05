@@ -30,7 +30,7 @@ EXIT_PRICE_BUFFER = .0005
 
 STOP_LOSS_PERCENT = 1.5
 ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
-MAX_TIMEOUT_CANDLES = 2
+MAX_TIMEOUT_CANDLES = 3
 
 class DcaBot:
     dora_trade_transaction: DoraTradeTransaction
@@ -211,7 +211,7 @@ class DcaBot:
 
         if self.divergence == "bullish":
             if current_price < self.stop_loss_price:
-                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES:
+                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
                     logger.info("STOP LOSS!")
                     self.close_long_position(current_price, 100)
                     self.reset_all()
@@ -221,7 +221,7 @@ class DcaBot:
                 self.stop_loss_timeout_candles = 0
         elif self.divergence == "bearish":
             if current_price > self.stop_loss_price:
-                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES:
+                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
                     logger.info("STOP LOSS!")
                     self.close_short_position(current_price, 100)
                     self.reset_all()
