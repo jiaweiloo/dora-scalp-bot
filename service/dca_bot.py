@@ -30,7 +30,7 @@ EXIT_PRICE_BUFFER = .0005
 
 STOP_LOSS_PERCENT = 1.5
 ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
-
+MAX_TIMEOUT_CANDLES = 2
 
 class DcaBot:
     dora_trade_transaction: DoraTradeTransaction
@@ -53,6 +53,7 @@ class DcaBot:
     entry_price_stoploss = False
 
     fee_items: IFeeCalc = {'trade_start_time': None, 'order_ids': None}
+    stop_loss_timeout_candles = 0
 
     # Test wallet part
     trade_bot_balance = 600
@@ -111,7 +112,7 @@ class DcaBot:
         self.candlestick_list.append(ohlc)
         self.current_ohlc = ohlc
         # self.check_price_hit_target_profit(self.current_ohlc.close)
-        # self.check_hit_stop_loss(self.current_ohlc.close)
+        self.check_hit_stop_loss(self.current_ohlc.close)
         # self.adjust_stop_loss(ohlc)
         self.candlestick_list = self.candlestick_list[-4:]
         # self.candles_count_passed_entry += 1
@@ -208,14 +209,26 @@ class DcaBot:
         # if self.candles_count_passed_entry < 3:
         #     return
 
-        if self.divergence == "bullish" and current_price < self.stop_loss_price:
-            logger.info("STOP LOSS!")
-            self.close_long_position(current_price, 100)
-            self.reset_all()
-        elif self.divergence == "bearish" and current_price > self.stop_loss_price:
-            logger.info("STOP LOSS!")
-            self.close_short_position(current_price, 100)
-            self.reset_all()
+        if self.divergence == "bullish":
+            if current_price < self.stop_loss_price:
+                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES:
+                    logger.info("STOP LOSS!")
+                    self.close_long_position(current_price, 100)
+                    self.reset_all()
+                else:
+                    self.stop_loss_timeout_candles += 1
+            else:
+                self.stop_loss_timeout_candles = 0
+        elif self.divergence == "bearish":
+            if current_price > self.stop_loss_price:
+                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES:
+                    logger.info("STOP LOSS!")
+                    self.close_short_position(current_price, 100)
+                    self.reset_all()
+                else:
+                    self.stop_loss_timeout_candles += 1
+            else:
+                self.stop_loss_timeout_candles = 0
 
         # price_diff = current_price - self.start_price
         # percent_diff = price_diff / self.start_price * 100
