@@ -31,6 +31,7 @@ EXIT_PRICE_BUFFER = .0005
 STOP_LOSS_PERCENT = 1.5
 ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
 
+
 class DcaBot:
     dora_trade_transaction: DoraTradeTransaction
     _id = None
@@ -75,12 +76,13 @@ class DcaBot:
 
     candlestick_list: List[Ohlc] = []
 
-    def __init__(self, _id, divergence, date, ohlc: Ohlc, prev_ohlc: Ohlc):
+    def __init__(self, _id, divergence, date, ohlc: Ohlc, prev_ohlc: Ohlc, stop_loss_price):
         self._id = _id
         self.date = date
         self.divergence = divergence
         self.current_ohlc = ohlc
         self.retest_ohlc = prev_ohlc
+        self.stop_loss_price = stop_loss_price
         self.trade_bot_balance = wallet.get_start_amount()
         self.fee_items = {'trade_start_time': time_now_in_ms(), 'order_ids': []}
         if self.trade_bot_balance == 0:
@@ -110,6 +112,7 @@ class DcaBot:
         self.current_ohlc = ohlc
         # self.check_price_hit_target_profit(self.current_ohlc.close)
         # self.check_hit_stop_loss(self.current_ohlc.close)
+        # self.adjust_stop_loss(ohlc)
         self.candlestick_list = self.candlestick_list[-4:]
         # self.candles_count_passed_entry += 1
 
@@ -148,14 +151,14 @@ class DcaBot:
         self.start_price = current_price
 
         if self.divergence == "bullish":
-            self.stop_loss_price = self.retest_ohlc.low
+            # self.stop_loss_price = self.retest_ohlc.low
             self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
             logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
                         f"Stop Loss: {self.stop_loss_price:.4f} "
                         f"TP: {self.take_profit_price:.4f}")
             self.open_long_position(current_price, self.trade_bot_balance)
         elif self.divergence == "bearish":
-            self.stop_loss_price = self.retest_ohlc.high
+            # self.stop_loss_price = self.retest_ohlc.high
             self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
             logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
                         f"Stop Loss: {self.stop_loss_price:.4f}"
@@ -168,6 +171,15 @@ class DcaBot:
 
         price_diff = current_price - self.start_price
         percent_diff = price_diff / self.start_price * 100
+
+        # if self.divergence == "bullish" and self.current_ohlc.hband != 0 and current_price > self.current_ohlc.hband:
+        #     logger.info(f"TP: {self.current_ohlc.hband=:.5f} {current_price=:.5f}")
+        #     self.close_long_position(current_price, 100)
+        #     self.reset_all()
+        # elif self.divergence == "bearish" and self.current_ohlc.lband != 0 and current_price < self.current_ohlc.lband:
+        #     logger.info(f"TP: {self.current_ohlc.hband=:.5f} {current_price=:.5f}")
+        #     self.close_short_position(current_price, 100)
+        #     self.reset_all()
 
         if self.divergence == "bullish" and (percent_diff > 0.5 or current_price > self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
@@ -272,6 +284,14 @@ class DcaBot:
             logger.info(f"STOP LOSS CHANGED TO ENTRY PRICE {self.start_price:.4f}")
             self.entry_price_stoploss = True
 
+    def adjust_stop_loss(self, ohlc: Ohlc):
+        if self.divergence == "bullish":
+            self.stop_loss_price = ohlc.lband
+            logger.info(f"STOP LOSS: {self.stop_loss_price:.5f}")
+        elif self.divergence == "bearish":
+            self.stop_loss_price = ohlc.hband
+            logger.info(f"STOP LOSS: {self.stop_loss_price:.5f}")
+
     def reset_all(self):
         self.divergence = None
         asset, fee, fee_in_usdt = itemgetter('asset', 'fee', 'fee_in_usdt')(self.calc_fee())
@@ -283,7 +303,7 @@ class DcaBot:
 
         msg = (f"END TRADE REPORT\n"
                f"==============================\n"
-               f"{'_id':<12}: {self._id}\n"              
+               f"{'_id':<12}: {self._id}\n"
                f"{'pnl':<12}: {pnl:.2f} USD\n"
                f"{'pnl(%)':<12}: {pnl_percentage:.4f}%\n"
                f"{'trade wallet bal':<12}: {self.trade_bot_balance:.2f} USD\n"

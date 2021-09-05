@@ -144,8 +144,8 @@ class Controller:
         if self.active_dca_bot_counter < MAX_CONCURRENT_TRADE:
             self.dca_bot_counter += 1
             self.active_dca_bot_counter += 1
-            divergence, rsi2, retest_ohlc = itemgetter('divergence', 'rsi2', 'retest_ohlc')(data)
-            dca_bot = DcaBot(f"A{self.dca_bot_counter:04d}", divergence, rsi2.date, rsi2, retest_ohlc)
+            divergence, rsi2, retest_ohlc, stop_loss_price = itemgetter('divergence', 'rsi2', 'retest_ohlc', 'stop_loss_price')(data)
+            dca_bot = DcaBot(f"A{self.dca_bot_counter:04d}", divergence, rsi2.date, rsi2, retest_ohlc, stop_loss_price)
             self.dca_bots.append(dca_bot)
         else:
             msg = f"Active trade overload {self.active_dca_bot_counter=}"

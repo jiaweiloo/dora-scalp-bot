@@ -46,6 +46,7 @@ class SignalBot(metaclass=Singleton):
     temadema_slopped = False
     rsi_retest_complete = False
     divergence_counter = 0
+    stop_loss_price = 0
 
     def __init__(self, origin):
         logger.info(f'START SIGNAL_BOT from {origin} interval: {INTERVAL}')
@@ -84,8 +85,8 @@ class SignalBot(metaclass=Singleton):
             ohlc.dema = self.get_latest_dema(self.candlestick_list, data_len, window=50)
             ohlc.tema = self.get_latest_tema(self.candlestick_list, data_len, window=50)
 
-            # bb_result = SignalBot.get_bollinger_band(self.candlestick_list, data_len=28)
-            # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
+            bb_result = SignalBot.get_bollinger_band(self.candlestick_list, data_len=28)
+            ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
 
             ee.emit(Trade.COMPLETE_CANDLESTICK_EVENT, ohlc)
 
@@ -104,6 +105,7 @@ class SignalBot(metaclass=Singleton):
                 self.check_dema_tema_cross(ohlc)
                 self.check_dema_tema_slope_correct(ohlc)
                 self.check_rsi_retest(ohlc)
+                self.get_stop_loss(ohlc)
                 result = self.check_2_white_soldiers(ohlc)
                 # After ending only save the current peak/trough and last peak/trough
                 if valid_rsi_target:
@@ -318,10 +320,12 @@ class SignalBot(metaclass=Singleton):
         if self.divergence == "bearish" and self.candlestick_list[-2].rsi8 > 65 \
                 and self.candlestick_list[-2].rsi8 > self.candlestick_list[-1].rsi8:
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} RSI RETEST COMPLETE")
+            self.stop_loss_price = ohlc.high
             self.rsi_retest_complete = True
         elif self.divergence == "bullish" and self.candlestick_list[-2].rsi8 < 35 \
                 and self.candlestick_list[-2].rsi8 < self.candlestick_list[-1].rsi8:
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} RSI RETEST COMPLETE")
+            self.stop_loss_price = ohlc.low
             self.rsi_retest_complete = True
 
     # Check 2 red/green candlesticks to trigger
@@ -333,7 +337,8 @@ class SignalBot(metaclass=Singleton):
             'divergence': self.divergence,
             'rsi2': ohlc,
             'price': self.point0_price,
-            'retest_ohlc': self.candlestick_list[-2]
+            'retest_ohlc': self.candlestick_list[-2],
+            'stop_loss_price': self.stop_loss_price
         }
         if self.divergence == "bearish" and self.candlestick_list[-2].open > self.candlestick_list[-2].close \
                 and self.candlestick_list[-1].open > self.candlestick_list[-1].close:
@@ -350,6 +355,18 @@ class SignalBot(metaclass=Singleton):
             self.reset_all()
             return divergence_result
 
+    def get_stop_loss(self, ohlc: Ohlc):
+        if not self.rsi_retest_complete:
+            return
+
+        if self.divergence == "bearish" and ohlc.high > self.stop_loss_price:
+            self.stop_loss_price = ohlc.high
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} NEW STOP LOSS {self.stop_loss_price:.4f}")
+
+        elif self.divergence == "bullish" and ohlc.low < self.stop_loss_price:
+            self.stop_loss_price = ohlc.low
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} NEW STOP LOSS {self.stop_loss_price:.4f}")
+
     def calc_gradient(self, y0: float, y1: float, x0: float, x1: float):
         change_in_y = y0 - y1
         change_in_x = x0 - x1
@@ -358,7 +375,7 @@ class SignalBot(metaclass=Singleton):
     def reset_all(self, is_invalidate=False):
         if is_invalidate:
             msg = (f"SIGNALS INVALIDATED\n"
-                   f"{self.divergence} divergence\n"                
+                   f"{self.divergence} divergence\n"
                    f"Divergence count: {self.divergence_counter}")
             logger.info(msg)
             telegram_bot.send_message(message=msg)
