@@ -71,14 +71,16 @@ class Controller:
     def read_filepath_or_buffer(self, filepath_or_buffer=None):
         """Read chart data from a filepath or buffer"""
         if filepath_or_buffer is None:
-            df = pd.read_csv("assets/01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            # df = pd.read_csv("assets/01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            df = pd.read_csv("assets/01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+
             # df = pd.read_csv("assets/01Aug21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/Binance_MATICUSDT_minute_2021.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 1, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 20, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 6, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
                 candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],

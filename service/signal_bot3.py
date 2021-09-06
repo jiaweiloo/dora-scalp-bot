@@ -245,13 +245,17 @@ class SignalBot(metaclass=Singleton):
         if ohlc.tema < ohlc.dema and self.divergence != "bearish":
             self.reset_all(is_invalidate=True)
             self.divergence = "bearish"
-            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED {self.divergence} "
-                        f"TEMA: {ohlc.tema:.4F} DEMA:{ohlc.dema:.4F}")
+            msg = (f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED {self.divergence} "
+                   f"TEMA: {ohlc.tema:.4F} DEMA:{ohlc.dema:.4F}")
+            logger.info(msg)
+            telegram_bot.send_message(message=msg)
         elif ohlc.tema > ohlc.dema and self.divergence != "bullish":
             self.reset_all(is_invalidate=True)
             self.divergence = "bullish"
-            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED {self.divergence} "
-                        f"TEMA: {ohlc.tema:.4F} DEMA:{ohlc.dema:.4F}")
+            msg = (f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED {self.divergence} "
+                   f"TEMA: {ohlc.tema:.4F} DEMA:{ohlc.dema:.4F}")
+            logger.info(msg)
+            telegram_bot.send_message(message=msg)
 
     def check_dema_tema_slope_correct(self, ohlc: Ohlc):
         if self.temadema_slopped:
