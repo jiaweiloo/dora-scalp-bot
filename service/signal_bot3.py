@@ -56,7 +56,7 @@ class SignalBot(metaclass=Singleton):
         logger.info("start stream candles")
         now_in_ms = time_now_in_ms()
         interval_in_ms = self.interval_in_ms()
-        num_complete_candles = 250  # To calculate RSI
+        num_complete_candles = 350  # To calculate RSI
         start_time = now_in_ms - (now_in_ms % interval_in_ms) - (interval_in_ms * num_complete_candles)
         latest_complete_close_time_in_ms, latest_incomplete_close_time_in_ms \
             = await self.stream_candles(timestamp=start_time)
@@ -78,10 +78,8 @@ class SignalBot(metaclass=Singleton):
         window = 14
         result = None
         if len(self.candlestick_list) >= window:
-            prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window)
             ohlc.rsi8 = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=8)
-            # ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=50)
             ohlc.dema = self.get_latest_dema(self.candlestick_list, data_len, window=50)
             ohlc.tema = self.get_latest_tema(self.candlestick_list, data_len, window=50)
 
@@ -96,21 +94,11 @@ class SignalBot(metaclass=Singleton):
 
             self.candlestick_list[-1] = ohlc
             if len(self.candlestick_list) >= data_len:
-                # zigzag_indicator = SignalBot.check_zigzag_pattern(self.candlestick_list[-3:])
-                # valid_rsi_target = SignalBot.check_rsi_target(zigzag_indicator, prev_ohlc)
-                # self.invalidate_expired_peaktrough(prev_ohlc)
-                # self.check_divergence(zigzag_indicator, prev_ohlc, self.last_peak, self.last_trough, valid_rsi_target)
                 self.check_dema_tema_cross(ohlc)
                 self.check_dema_tema_slope_correct(ohlc)
                 self.check_rsi_retest(ohlc)
                 self.get_stop_loss(ohlc)
                 result = self.check_2_white_soldiers(ohlc)
-                # After ending only save the current peak/trough and last peak/trough
-                # if valid_rsi_target:
-                #     if zigzag_indicator == 'peak':
-                #         self.last_peak = prev_ohlc
-                #     elif zigzag_indicator == 'trough':
-                #         self.last_trough = prev_ohlc
         return result
 
     def stats_requested(self, chat_id):
@@ -258,7 +246,7 @@ class SignalBot(metaclass=Singleton):
             telegram_bot.send_message(message=msg)
 
     def check_dema_tema_slope_correct(self, ohlc: Ohlc):
-        if self.temadema_slopped:
+        if self.temadema_slopped or self.candlestick_list[-3].dema is None:
             return
 
         if self.divergence == "bearish" \
@@ -337,7 +325,7 @@ class SignalBot(metaclass=Singleton):
             logger.info(msg)
             telegram_bot.send_message(message=msg)
         self.point0_price = 0
-        self.divergence = None
+        # self.divergence = None
         self.is_safe_last_peak = False
         self.is_safe_last_trough = False
         self.tema_dema_crossed = False
