@@ -12,7 +12,7 @@ from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick
 from service.dca_bot import DcaBot
 from service.logging import setup_logging, controller_logger as logger
-from service.signal_bot2 import SignalBot
+from service.signal_bot3 import SignalBot
 from service.telegram_bot import telegram_bot
 from settings import MODE, SYMBOL, INTERVAL, IS_PAPER_TRADING, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
 from utils.events import ESignal, ee, Trade, TelegramEventType
@@ -78,7 +78,7 @@ class Controller:
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 1, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 20, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 6, 30, 23, 0))]
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
                 candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],

@@ -182,12 +182,16 @@ class DcaBot:
         #     self.close_short_position(current_price, 100)
         #     self.reset_all()
 
-        if self.divergence == "bullish" and (percent_diff > 0.5 or current_price > self.take_profit_price):
+        if self.divergence == "bullish" and (percent_diff >= 0.5 or current_price >= self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
+            if MODE == EMode.TEST:
+                current_price = self.start_price * 1.005
             self.close_long_position(current_price, 100)
             self.reset_all()
-        elif self.divergence == "bearish" and (percent_diff < -0.5 or current_price < self.take_profit_price):
+        elif self.divergence == "bearish" and (percent_diff <= -0.5 or current_price <= self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
+            if MODE == EMode.TEST:
+                current_price = self.start_price * 0.995
             self.close_short_position(current_price, 100)
             self.reset_all()
         #
