@@ -141,8 +141,8 @@ class DcaBot:
 
     def process_current_price(self, current_price):
         self.trigger_base_order(current_price)
-        self.check_hit_stop_loss(current_price)
         self.check_price_hit_target_profit(current_price)
+        # self.check_hit_stop_loss(current_price)
         # self.activate_entry_price_stop_loss(current_price)
 
     def trigger_base_order(self, current_price):
@@ -336,8 +336,7 @@ class DcaBot:
                f"=======================\n"
                f"{'_id':<15}: {self._id} \n"
                f"{'divergence':<15}: {self.divergence} \n"
-               f"{'avg buy':<15}: {self.avg_buyin_price:.4f} USD\n"
-               f"{'last buy':<15}: {self.last_buyin_price} USD\n"
+               f"{'Entry price':<15}: {self.start_price} USD\n"
                f"{'Coin amount':<15}: {self.coin_amount} \n"
                f"{'Trade bot bal':<15}: {self.trade_bot_balance:.3f} USD\n"
                f"=======================\n")
@@ -428,6 +427,7 @@ class DcaBot:
                f"{'Coin':<15}: {self.coin_amount:.4f}\n"
                f"{'Borrowed':<15}: {self.owed_coin_amount:.2f}\n"
                f"{'Amt To rebuy':<15}: {coin_amount_to_rebuy:.2f} ({amount_of_coin_to_rebuy_in_usdt:.2f} USD)\n"
+               f"{'Entry price':<15}: {self.start_price} USD\n"
                f"{'PNL':<15}: {pnl:.4f} USD\n"
                f"{'SHORTED AMT':<15}: {value_to_close_in_stables:.4f} USD\n"
                f"--------------------------\n")
@@ -462,7 +462,8 @@ class DcaBot:
                f"{'Borrowed':<15}: {self.owed_coin_amount:.2f}\n"
                f"{'stables_amt_in_long':<15}: {value_to_close_in_stables:.2f}\n"
                f"{'Amt To sell':<15}: {coin_amount_to_sell:.2f} ({amount_of_coin_to_sell_in_usdt:.2f} USD)\n"
-               f"{'pnl':<15}: {pnl:.4f} USD\n"
+               f"{'PNL':<15}: {pnl:.4f} USD\n"
+               f"{'Entry price':<15}: {self.start_price} USD\n"
                f"----------------------------\n")
         logger.info(msg)
         telegram_bot.send_message(message=msg)

@@ -391,7 +391,7 @@ class SignalBot(metaclass=Singleton):
         await asyncio.sleep(timeout_in_sec)
         retry_limit = 3
         while True:
-            candlesticks = exchange.get_candlestick(timestamp, limit=CANDLESTICK_LIMIT)
+            candlesticks = exchange.get_candlestick(interval=INTERVAL, start_time=timestamp, limit=CANDLESTICK_LIMIT)
             if len(candlesticks) < 2:
                 retry_limit -= 1
             if retry_limit <= 0 or len(candlesticks) >= 2:

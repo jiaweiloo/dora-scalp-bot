@@ -19,6 +19,7 @@ from custom_types.exchange_type import ICandlestick
 from service.exchange import exchange
 from service.logging import setup_logging, signal_bot_logger as logger
 from service.telegram_bot import telegram_bot
+from service.wallet import Wallet
 from settings import MODE, INTERVAL
 from utils.chart_utils import CANDLESTICK_INTERVAL_MAP
 from utils.events import ee, ESignal, TelegramEventType, Trade
@@ -30,23 +31,24 @@ Divergence = Optional[Literal['bullish', 'bearish']]
 CANDLESTICK_LIMIT = 499
 BUFFER_TIMEOUT_IN_SEC = 1
 
+# If price within 0.0001 different will not consider green/red candle
+CANDLE_BUFFER = 0.0002
 
 class SignalBot(metaclass=Singleton):
     """Read chart data and indicate trade signals"""
     candlestick_list: List[Ohlc] = []
-    last_peak: Ohlc = None
-    last_trough: Ohlc = None
     divergence: Divergence = None
     point0_price = 0
-    is_safe_last_peak = False
-    is_safe_last_trough = False
 
-    hit_opposite_rsi = False
-    tema_dema_crossed = False
+    tema_dema_crossed_counter = 0
     temadema_slopped = False
     rsi_retest_complete = False
-    divergence_counter = 0
     stop_loss_price = 0
+
+    wallet = Wallet()
+
+    skip_divergence = False
+    double_candles_complete = False
 
     def __init__(self, origin):
         logger.info(f'START SIGNAL_BOT from {origin} interval: {INTERVAL}')
@@ -75,7 +77,7 @@ class SignalBot(metaclass=Singleton):
         self.candlestick_list.append(ohlc)
         self.candlestick_list = self.candlestick_list[-300:]
         data_len = 250
-        window = 14
+        window = 100
         result = None
         if len(self.candlestick_list) >= window:
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window)
@@ -107,11 +109,9 @@ class SignalBot(metaclass=Singleton):
                f"{'interval':<12}: {INTERVAL} \n"
                f"{'ohlc date':<12}: {self.candlestick_list[-1].date:%Y-%m-%d %H:%M}\n"
                f"{'ohlc close':<12}: {self.candlestick_list[-1].close:.5f} USD\n"
-               f"{'ohlc rsi':<12}: {self.candlestick_list[-1].rsi:.4f} \n"
-               f"{'peak rsi':<12}: {(self.last_peak.rsi if self.last_peak else 0):.4f}\n"
-               f"{'peak date':<12}: {(self.last_peak.date if self.last_peak else datetime.now()):%Y-%m-%d %H:%M}\n"
-               f"{'trough rsi':<12}: {(self.last_trough.rsi if self.last_trough else 0):.4f}\n"
-               f"{'trough date':<12}: {(self.last_trough.date if self.last_trough else datetime.now()):%Y-%m-%d %H:%M}\n"
+               f"{'ohlc dema':<12}: {self.candlestick_list[-1].dema:.4f} \n"
+               f"{'ohlc tema':<12}: {self.candlestick_list[-1].tema:.4f} \n"
+               f"{'EMA crossed count':<12}: {self.tema_dema_crossed_counter} \n"
                f"==========================\n")
         telegram_bot.send_message(chat_id=chat_id, message=msg)
 
@@ -160,93 +160,35 @@ class SignalBot(metaclass=Singleton):
         # print(DEMA)
         return TEMA.iloc[-1]
 
-    @classmethod
-    def check_zigzag_pattern(cls, data: List[Ohlc]) -> ZigzagIndicator:
-        """Find peak/trough from a chart data"""
-        assert len(data) >= 3
-
-        # Check if peak/trough with last 3 item
-        peaks, _ = find_peaks([obj.rsi for obj in data[-3:]])
-        if len(peaks) > 0:
-            return 'peak'
-        troughs, _ = find_peaks(-pd.Series([obj.rsi for obj in data[-3:]]))
-        if len(troughs) > 0:
-            return 'trough'
-        return None
-
-    @classmethod
-    def check_rsi_target(cls, zigzag_indicator: ZigzagIndicator, prev_ohlc: Ohlc):
-        """Check if RSI target has been hit"""
-        valid_rsi_target = False
-        if zigzag_indicator == 'peak' and prev_ohlc.rsi >= 70:
-            valid_rsi_target = True
-        if zigzag_indicator == 'trough' and prev_ohlc.rsi <= 30:
-            valid_rsi_target = True
-        return valid_rsi_target
-
-    def invalidate_expired_peaktrough(self, prev_ohlc: Ohlc):
-        """ Invalidate peak and trough after last peak trough is more than 1 hours """
-        if self.last_peak is not None and prev_ohlc.date - timedelta(minutes=60) > self.last_peak.date:
-            self.last_peak = None
-            self.is_safe_last_peak = False
-        if self.last_trough is not None and prev_ohlc.date - timedelta(minutes=60) > self.last_trough.date:
-            self.last_trough = None
-            self.is_safe_last_trough = False
-
-    def check_divergence(self, zigzag_indicator: ZigzagIndicator, prev_ohlc: Ohlc, last_peak: Ohlc, last_trough: Ohlc,
-                         valid_rsi_target: bool):
-        """Check if there is a bullish or bearish divergence"""
-        divergence, rsi1_ohlc, rsi2_ohlc, point0_price = None, None, None, None
-        if zigzag_indicator == 'peak' and last_peak and valid_rsi_target and prev_ohlc.rsi < last_peak.rsi \
-                and prev_ohlc.high >= last_peak.high:
-            rsi1_ohlc = last_peak
-            rsi2_ohlc = prev_ohlc
-            point0_price = prev_ohlc.high
-            divergence = 'bearish'
-            self.hit_opposite_rsi = False
-        elif zigzag_indicator == 'trough' and last_trough and valid_rsi_target and prev_ohlc.rsi > last_trough.rsi \
-                and prev_ohlc.low <= last_trough.low:
-            rsi1_ohlc = last_trough
-            rsi2_ohlc = prev_ohlc
-            point0_price = prev_ohlc.low
-            divergence = 'bullish'
-            self.hit_opposite_rsi = False
-
-        if divergence is not None:
-            self.divergence_counter += 1
-            self.divergence = divergence
-            self.point0_price = point0_price
-            msg = (f"{rsi2_ohlc.date}\n"
-                   f"{divergence} divergence\n"
-                   f"TARGET 1️⃣: {rsi1_ohlc.rsi:.2f} [{rsi1_ohlc.close:.4f} USD] ({rsi1_ohlc.date:%H:%M})\n"
-                   f"TARGET 2️⃣: {rsi2_ohlc.rsi:.2f} [{point0_price:.4f} USD]\n"
-                   f"Divergence count: {self.divergence_counter}")
-            logger.info(msg)
-            telegram_bot.send_message(message=msg)
-            # divergence_result = {'divergence': self.divergence, 'rsi2': prev_ohlc, 'price': self.point0_price}
-            # if MODE == EMode.PRODUCTION:
-            #     ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
-            # return divergence_result
-
     def check_dema_tema_cross(self, ohlc: Ohlc):
 
         if ohlc.tema < ohlc.dema and self.divergence != "bearish":
+            self.skip_divergence = False
             self.reset_all(is_invalidate=True)
             self.divergence = "bearish"
             msg = (f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED {self.divergence} "
                    f"TEMA: {ohlc.tema:.4F} DEMA:{ohlc.dema:.4F}")
             logger.info(msg)
             telegram_bot.send_message(message=msg)
+            self.tema_dema_crossed_counter += 1
+            if self.wallet.active_trade > 0:
+                self.skip_divergence = True
         elif ohlc.tema > ohlc.dema and self.divergence != "bullish":
+            self.skip_divergence = False
             self.reset_all(is_invalidate=True)
             self.divergence = "bullish"
             msg = (f"{ohlc.date:%Y-%m-%d %H:%M:%S} DEMA_TEMA_CROSSED {self.divergence} "
                    f"TEMA: {ohlc.tema:.4F} DEMA:{ohlc.dema:.4F}")
             logger.info(msg)
             telegram_bot.send_message(message=msg)
+            self.tema_dema_crossed_counter += 1
+            if self.wallet.active_trade > 0:
+                self.skip_divergence = True
 
     def check_dema_tema_slope_correct(self, ohlc: Ohlc):
-        if self.temadema_slopped or self.candlestick_list[-3].dema is None:
+
+        if self.temadema_slopped or self.candlestick_list[-3].dema is None \
+                or self.tema_dema_crossed_counter < 2 or self.skip_divergence:
             return
 
         if self.divergence == "bearish" \
@@ -275,7 +217,7 @@ class SignalBot(metaclass=Singleton):
 
     # Check 2 red/green candlesticks to trigger
     def check_2_white_soldiers(self, ohlc: Ohlc):
-        if not self.rsi_retest_complete:
+        if not self.rsi_retest_complete or self.double_candles_complete:
             return
 
         divergence_result = {
@@ -285,19 +227,22 @@ class SignalBot(metaclass=Singleton):
             'retest_ohlc': self.candlestick_list[-2],
             'stop_loss_price': self.stop_loss_price
         }
-        if self.divergence == "bearish" and self.candlestick_list[-2].open > self.candlestick_list[-2].close \
-                and self.candlestick_list[-1].open > self.candlestick_list[-1].close:
-            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TWO RED CANDLE")
+        candle1 = self.candlestick_list[-2].close - self.candlestick_list[-2].open
+        candle2 = self.candlestick_list[-1].close - self.candlestick_list[-1].open
+
+        if self.divergence == "bearish" and candle1 <= -CANDLE_BUFFER and candle2 <= -CANDLE_BUFFER:
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TWO RED CANDLE {candle1:.5f} {candle2:.5f}")
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
-            self.reset_all()
+            # self.reset_all()
+            self.double_candles_complete = True
             return divergence_result
-        elif self.divergence == "bullish" and self.candlestick_list[-2].open < self.candlestick_list[-2].close \
-                and self.candlestick_list[-1].open < self.candlestick_list[-1].close:
-            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TWO GREEN CANDLE")
+        elif self.divergence == "bullish" and candle1 >= CANDLE_BUFFER and candle2 >= CANDLE_BUFFER:
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} TWO GREEN CANDLE  {candle1:.5f} {candle2:.5f}")
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
-            self.reset_all()
+            self.double_candles_complete = True
+            # self.reset_all()
             return divergence_result
 
     def get_stop_loss(self, ohlc: Ohlc):
@@ -312,31 +257,23 @@ class SignalBot(metaclass=Singleton):
             self.stop_loss_price = ohlc.low
             logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} NEW STOP LOSS {self.stop_loss_price:.4f}")
 
-    def calc_gradient(self, y0: float, y1: float, x0: float, x1: float):
-        change_in_y = y0 - y1
-        change_in_x = x0 - x1
-        return change_in_y / change_in_x
-
     def reset_all(self, is_invalidate=False):
         if is_invalidate:
-            msg = (f"SIGNALS INVALIDATED\n"
+            msg = (f"SIGNALS INVERTED\n"
                    f"{self.divergence} divergence\n"
-                   f"Divergence count: {self.divergence_counter}")
+                   f"EMA crossed counter: {self.tema_dema_crossed_counter}")
             logger.info(msg)
             telegram_bot.send_message(message=msg)
         self.point0_price = 0
-        # self.divergence = None
-        self.is_safe_last_peak = False
-        self.is_safe_last_trough = False
-        self.tema_dema_crossed = False
         self.temadema_slopped = False
         self.rsi_retest_complete = False
+        self.double_candles_complete = False
 
     async def stream_candles(self, timestamp, timeout_in_sec=0):
         await asyncio.sleep(timeout_in_sec)
         retry_limit = 3
         while True:
-            candlesticks = exchange.get_candlestick(timestamp, limit=CANDLESTICK_LIMIT)
+            candlesticks = exchange.get_candlestick(interval=INTERVAL, start_time=timestamp, limit=CANDLESTICK_LIMIT)
             if len(candlesticks) < 2:
                 retry_limit -= 1
             if retry_limit <= 0 or len(candlesticks) >= 2:

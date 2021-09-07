@@ -12,7 +12,7 @@ from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick
 from service.dca_bot import DcaBot
 from service.logging import setup_logging, controller_logger as logger
-from service.signal_bot3 import SignalBot
+from service.signal_bot2 import SignalBot
 from service.telegram_bot import telegram_bot
 from settings import MODE, SYMBOL, INTERVAL, IS_PAPER_TRADING, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
 from utils.events import ESignal, ee, Trade, TelegramEventType
@@ -71,20 +71,25 @@ class Controller:
     def read_filepath_or_buffer(self, filepath_or_buffer=None):
         """Read chart data from a filepath or buffer"""
         if filepath_or_buffer is None:
-            # df = pd.read_csv("assets/01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
-            df = pd.read_csv("assets/01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            df = pd.read_csv("assets/01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            # df = pd.read_csv("assets/01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            # df = pd.read_csv("assets/maticusdt_06Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
 
             # df = pd.read_csv("assets/01Aug21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/Binance_MATICUSDT_minute_2021.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 1, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 20, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 9, 6, 10, 00)) & (df["date"] < datetime(2021, 9, 7, 0, 58))]
+
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
                 candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],
                                'openTime': int(row['date'].timestamp()*1000)}
+
+                for dca_bot in self.dca_bots:
+                    _id = dca_bot.process_candlestick(candlestick)
 
                 divergence_result = self.signal_bot.candle_incoming(candlestick)
                 if isinstance(divergence_result, dict):
@@ -96,10 +101,9 @@ class Controller:
                 # if self.check_safe_resample_15m(candlestick):
                 #     self.resample_candle_15m(self.list_15m)
 
-                for dca_bot in self.dca_bots:
-                    _id = dca_bot.process_candlestick(candlestick)
-                    # if _id is not None:
-                    #     self.pop_dca_bot(_id)
+
+                # if _id is not None:
+                #     self.pop_dca_bot(_id)
             logger.info("--end--")
 
     def check_safe_resample_15m(self, _1m_candlestick_dict: ICandlestick):

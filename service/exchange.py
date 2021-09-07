@@ -34,10 +34,13 @@ class Exchange(metaclass=Singleton):
             self.sub_client.subscribe_candlestick_event(SYMBOL, CandlestickInterval.MIN5,
                                                         Exchange.on_candlestick_event, Exchange.error)
 
-    def get_candlestick(self, start_time=None, end_time=None, limit=10) \
-            -> List[ICandlestick]:
+    def get_candlestick(self, interval=CandlestickInterval.MIN1,
+                        start_time=None,
+                        end_time=None,
+                        limit=10,
+                        symbol=SYMBOL) -> List[ICandlestick]:
         """Return a list of dictionary of type ICandlestick"""
-        result = self.req_client.get_candlestick_data(symbol=SYMBOL, interval=INTERVAL, startTime=start_time,
+        result = self.req_client.get_candlestick_data(symbol=symbol, interval=interval, startTime=start_time,
                                                       endTime=end_time, limit=limit)
         return Exchange.parse_obj_list_to_dict_list(result)
 

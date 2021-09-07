@@ -102,6 +102,9 @@ class Wallet(metaclass=Singleton):
         dora_trade_transaction.overall_fund = self.overall_wallet_fund
         self.save_txn_to_db(dora_trade_transaction)
 
+    def get_active_trade(self):
+        return self.active_trade
+
     def save_txn_to_db(self, dora_trade_transaction: DoraTradeTransaction):
         if MODE == EMode.TEST or IS_PAPER_TRADING:
             return
