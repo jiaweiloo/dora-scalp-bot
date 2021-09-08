@@ -78,8 +78,8 @@ class Controller:
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 1, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 0, 0))]
+            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():

@@ -211,6 +211,9 @@ class DcaBot:
 
         if self.divergence == "bullish":
             if current_price < self.stop_loss_price:
+                # logger.info("STOP LOSS!")
+                # self.close_long_position(current_price, 100)
+                # self.reset_all()
                 if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
                     logger.info("STOP LOSS!")
                     self.close_long_position(current_price, 100)
@@ -221,6 +224,9 @@ class DcaBot:
                 self.stop_loss_timeout_candles = 0
         elif self.divergence == "bearish":
             if current_price > self.stop_loss_price:
+                # logger.info("STOP LOSS!")
+                # self.close_short_position(current_price, 100)
+                # self.reset_all()
                 if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
                     logger.info("STOP LOSS!")
                     self.close_short_position(current_price, 100)
