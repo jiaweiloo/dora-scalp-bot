@@ -83,8 +83,8 @@ class SignalBot(metaclass=Singleton):
             ee.emit(Trade.COMPLETE_CANDLESTICK_EVENT, ohlc)
 
             if MODE == EMode.PRODUCTION:
-                logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close} rsi: {ohlc.rsi:.4f} "
-                            f"dema 50: {ohlc.dema:.5f} tema 50: {ohlc.tema:.5f}")
+                logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close} RSI: {ohlc.rsi:.4f} "
+                            f"EMA 20: {ohlc.ema:.5f}")
 
             self.candlestick_list[-1] = ohlc
             if len(self.candlestick_list) >= data_len:
