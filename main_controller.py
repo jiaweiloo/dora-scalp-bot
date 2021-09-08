@@ -12,7 +12,7 @@ from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick
 from service.dca_bot import DcaBot
 from service.logging import setup_logging, controller_logger as logger
-from service.signal_bot2 import SignalBot
+from service.signal_bot4 import SignalBot
 from service.telegram_bot import telegram_bot
 from settings import MODE, SYMBOL, INTERVAL, IS_PAPER_TRADING, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
 from utils.events import ESignal, ee, Trade, TelegramEventType
@@ -71,29 +71,29 @@ class Controller:
     def read_filepath_or_buffer(self, filepath_or_buffer=None):
         """Read chart data from a filepath or buffer"""
         if filepath_or_buffer is None:
-            df = pd.read_csv("assets/01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            df = pd.read_csv("assets/maticusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
-            # df = pd.read_csv("assets/maticusdt_06Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
-
             # df = pd.read_csv("assets/01Aug21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/Binance_MATICUSDT_minute_2021.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 1, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 9, 6, 10, 00)) & (df["date"] < datetime(2021, 9, 7, 0, 58))]
+            # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
                 candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],
                                'openTime': int(row['date'].timestamp()*1000)}
 
-                for dca_bot in self.dca_bots:
-                    _id = dca_bot.process_candlestick(candlestick)
+
 
                 divergence_result = self.signal_bot.candle_incoming(candlestick)
                 if isinstance(divergence_result, dict):
                     self.on_divergence(divergence_result)
+
+                for dca_bot in self.dca_bots:
+                    _id = dca_bot.process_candlestick(candlestick)
 
                 # if self.check_safe_resample_5m(candlestick):
                 #     self.resample_candle_5m(self.list_5m)
@@ -150,8 +150,8 @@ class Controller:
         if self.active_dca_bot_counter < MAX_CONCURRENT_TRADE:
             self.dca_bot_counter += 1
             self.active_dca_bot_counter += 1
-            divergence, rsi2, retest_ohlc, stop_loss_price = itemgetter('divergence', 'rsi2', 'retest_ohlc', 'stop_loss_price')(data)
-            dca_bot = DcaBot(f"A{self.dca_bot_counter:04d}", divergence, rsi2.date, rsi2, retest_ohlc, stop_loss_price)
+            divergence, rsi2, stop_loss_price = itemgetter('divergence', 'rsi2', 'price')(data)
+            dca_bot = DcaBot(f"A{self.dca_bot_counter:04d}", divergence, rsi2.date, rsi2, stop_loss_price)
             self.dca_bots.append(dca_bot)
         else:
             msg = f"Active trade overload {self.active_dca_bot_counter=}"

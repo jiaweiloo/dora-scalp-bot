@@ -49,7 +49,6 @@ class DcaBot:
 
     current_ohlc: Ohlc = None
     prev_ohlc: Ohlc = None
-    retest_ohlc: Ohlc = None
     entry_price_stoploss = False
 
     fee_items: IFeeCalc = {'trade_start_time': None, 'order_ids': None}
@@ -77,12 +76,11 @@ class DcaBot:
 
     candlestick_list: List[Ohlc] = []
 
-    def __init__(self, _id, divergence, date, ohlc: Ohlc, prev_ohlc: Ohlc, stop_loss_price):
+    def __init__(self, _id, divergence, date, ohlc: Ohlc, stop_loss_price):
         self._id = _id
         self.date = date
         self.divergence = divergence
         self.current_ohlc = ohlc
-        self.retest_ohlc = prev_ohlc
         self.stop_loss_price = stop_loss_price
         self.trade_bot_balance = wallet.get_start_amount()
         self.fee_items = {'trade_start_time': time_now_in_ms(), 'order_ids': []}
@@ -152,18 +150,16 @@ class DcaBot:
         self.start_price = current_price
 
         if self.divergence == "bullish":
-            # self.stop_loss_price = self.retest_ohlc.low
             self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
             logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
-                        f"Stop Loss: {self.stop_loss_price:.4f} "
-                        f"TP: {self.take_profit_price:.4f}")
+                        f"Stop Loss: {self.stop_loss_price:.4f}, TP: {self.take_profit_price:.4f}"
+                        )
             self.open_long_position(current_price, self.trade_bot_balance)
         elif self.divergence == "bearish":
-            # self.stop_loss_price = self.retest_ohlc.high
             self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
             logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
-                        f"Stop Loss: {self.stop_loss_price:.4f}"
-                        f"TP: {self.take_profit_price:.4f}")
+                        f"Stop Loss: {self.stop_loss_price:.4f}, TP: {self.take_profit_price:.4f}"
+                        )
             self.open_short_position(current_price, self.trade_bot_balance)
 
     def check_price_hit_target_profit(self, current_price):
