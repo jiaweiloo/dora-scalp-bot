@@ -241,3 +241,6 @@ class EToken:
     MATIC_USDT = 'maticusdt'
     BTC_USDT = 'btcusdt'
     AVAX_USDT = 'avaxusdt'
+    AAVE_USDT = 'aaveusdt'
+    SOLUSDT = 'solusdt'
+    XRPUSDT = 'xrpusdt'

@@ -75,8 +75,9 @@ class SignalBot(metaclass=Singleton):
         result = None
         if len(self.candlestick_list) >= window:
             prev_ohlc: Ohlc = self.candlestick_list[-2]
-            ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
-            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=21)
+            ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=21)
+            ohlc.ema20 = self.get_latest_ema(self.candlestick_list, data_len, window=20)
+            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=30)
             bb_result = SignalBot.get_bollinger_band(self.candlestick_list, data_len=28)
             ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
 
@@ -94,7 +95,7 @@ class SignalBot(metaclass=Singleton):
                 self.check_divergence(zigzag_indicator, prev_ohlc, self.last_peak, self.last_trough, valid_rsi_target)
                 # self.check_is_hit_opposite_rsi(ohlc)
                 # self.check_is_safe_divergence(ohlc)
-
+                self.adjust_p0(ohlc)
                 result = self.safety_check(ohlc)
                 # After ending only save the current peak/trough and last peak/trough
                 if valid_rsi_target:
@@ -242,6 +243,14 @@ class SignalBot(metaclass=Singleton):
                 f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} > ema21 {ohlc.ema:.4f}")
             self.reset_all()
             return divergence_result
+
+    def adjust_p0(self, ohlc: Ohlc):
+        if self.divergence == "bearish" and ohlc.high > self.point0_price:
+            self.point0_price = ohlc.high
+            logger.info(f"NEW STOP LOSS {self.point0_price:.4f}")
+        elif self.divergence == "bullish" and ohlc.rsi > 70:
+            self.point0_price = ohlc.high
+            logger.info(f"NEW STOP LOSS {self.point0_price:.4f}")
 
     def reset_all(self):
         self.point0_price = 0

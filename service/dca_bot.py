@@ -28,9 +28,12 @@ load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
 EXIT_PRICE_BUFFER = .0005
 
+TARGET_PROFIT_PERCENTAGE = 0.2
 STOP_LOSS_PERCENT = 1.5
 ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
-MAX_TIMEOUT_CANDLES = 3
+MAX_TIMEOUT_CANDLES = 4
+HARD_STOP_LOSS_PERCENT = 0.003
+
 
 class DcaBot:
     dora_trade_transaction: DoraTradeTransaction
@@ -42,6 +45,7 @@ class DcaBot:
     avg_buyin_price = 0
     last_buyin_price = 0
     stop_loss_price = 0
+    hard_stop_loss_price = 0
     take_profit_price = 0
 
     next_safety_order_price = 0
@@ -82,6 +86,12 @@ class DcaBot:
         self.divergence = divergence
         self.current_ohlc = ohlc
         self.stop_loss_price = stop_loss_price
+
+        if self.divergence == "bullish":
+            self.hard_stop_loss_price = self.stop_loss_price * (1 - HARD_STOP_LOSS_PERCENT)
+        elif self.divergence == "bearish":
+            self.hard_stop_loss_price = self.stop_loss_price * (1 + HARD_STOP_LOSS_PERCENT)
+
         self.trade_bot_balance = wallet.get_start_amount()
         self.fee_items = {'trade_start_time': time_now_in_ms(), 'order_ids': []}
         if self.trade_bot_balance == 0:
@@ -110,7 +120,7 @@ class DcaBot:
         self.candlestick_list.append(ohlc)
         self.current_ohlc = ohlc
         # self.check_price_hit_target_profit(self.current_ohlc.close)
-        self.check_hit_stop_loss(self.current_ohlc.close)
+        self.check_hit_stop_loss(self.current_ohlc)
         # self.adjust_stop_loss(ohlc)
         self.candlestick_list = self.candlestick_list[-4:]
         # self.candles_count_passed_entry += 1
@@ -140,6 +150,7 @@ class DcaBot:
     def process_current_price(self, current_price):
         self.trigger_base_order(current_price)
         self.check_price_hit_target_profit(current_price)
+        # self.check_price_hit_hard_stop_loss(current_price)
         # self.check_hit_stop_loss(current_price)
         # self.activate_entry_price_stop_loss(current_price)
 
@@ -151,16 +162,15 @@ class DcaBot:
 
         if self.divergence == "bullish":
             self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
-            logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
-                        f"Stop Loss: {self.stop_loss_price:.4f}, TP: {self.take_profit_price:.4f}"
-                        )
             self.open_long_position(current_price, self.trade_bot_balance)
         elif self.divergence == "bearish":
             self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
-            logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
-                        f"Stop Loss: {self.stop_loss_price:.4f}, TP: {self.take_profit_price:.4f}"
-                        )
             self.open_short_position(current_price, self.trade_bot_balance)
+
+        logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
+                    f"Current Price: {current_price:.4f}\n"
+                    f"Stop Loss: {self.stop_loss_price:.4f}, Hard SL: {self.hard_stop_loss_price:.4f}\n"
+                    f"TP: {self.take_profit_price:.4f}")
 
     def check_price_hit_target_profit(self, current_price):
         if self.divergence is None or len(self.candlestick_list) < 3:
@@ -178,13 +188,13 @@ class DcaBot:
         #     self.close_short_position(current_price, 100)
         #     self.reset_all()
 
-        if self.divergence == "bullish" and (percent_diff >= 0.5 or current_price >= self.take_profit_price):
+        if self.divergence == "bullish" and (percent_diff >= TARGET_PROFIT_PERCENTAGE or current_price >= self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
             if MODE == EMode.TEST:
                 current_price = self.start_price * 1.005
             self.close_long_position(current_price, 100)
             self.reset_all()
-        elif self.divergence == "bearish" and (percent_diff <= -0.5 or current_price <= self.take_profit_price):
+        elif self.divergence == "bearish" and (percent_diff <= -TARGET_PROFIT_PERCENTAGE or current_price <= self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
             if MODE == EMode.TEST:
                 current_price = self.start_price * 0.995
@@ -205,36 +215,45 @@ class DcaBot:
         #     self.close_short_position(current_price, 100)
         #     self.reset_all()
 
-    def check_hit_stop_loss(self, current_price):
+    def check_hit_stop_loss(self, ohlc:Ohlc):
         # if self.candles_count_passed_entry < 3:
         #     return
 
         if self.divergence == "bullish":
-            if current_price < self.stop_loss_price:
+            if ohlc.close < self.stop_loss_price:
                 # logger.info("STOP LOSS!")
                 # self.close_long_position(current_price, 100)
                 # self.reset_all()
                 if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
                     logger.info("STOP LOSS!")
-                    self.close_long_position(current_price, 100)
+                    self.close_long_position(ohlc.close, 100)
                     self.reset_all()
                 else:
                     self.stop_loss_timeout_candles += 1
             else:
                 self.stop_loss_timeout_candles = 0
+            # if ohlc.close < ohlc.ema20:
+            #     logger.info("STOP LOSS HIT EMA 20!")
+            #     self.close_long_position(ohlc.close, 100)
+            #     self.reset_all()
         elif self.divergence == "bearish":
-            if current_price > self.stop_loss_price:
+            if ohlc.close > self.stop_loss_price:
                 # logger.info("STOP LOSS!")
                 # self.close_short_position(current_price, 100)
                 # self.reset_all()
                 if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
                     logger.info("STOP LOSS!")
-                    self.close_short_position(current_price, 100)
+                    self.close_short_position(ohlc.close, 100)
                     self.reset_all()
                 else:
                     self.stop_loss_timeout_candles += 1
             else:
                 self.stop_loss_timeout_candles = 0
+
+            # if ohlc.close > ohlc.ema20:
+            #     logger.info("STOP LOSS HIT EMA 20!")
+            #     self.close_short_position(ohlc.close, 100)
+            #     self.reset_all()
 
         # price_diff = current_price - self.start_price
         # percent_diff = price_diff / self.start_price * 100
@@ -291,6 +310,16 @@ class DcaBot:
         # elif self.divergence == "bearish" and current_price > self.start_price:
         #     self.close_short_position(current_price, 100)
         #     self.reset_all()
+
+    def check_price_hit_hard_stop_loss(self, current_price):
+        if self.divergence == "bullish" and current_price < self.hard_stop_loss_price:
+            logger.info("HIT HARD STOP LOSS!")
+            self.close_long_position(current_price, 100)
+            self.reset_all()
+        elif self.divergence == "bearish" and current_price > self.hard_stop_loss_price:
+            logger.info("HIT HARD STOP LOSS!")
+            self.close_short_position(current_price, 100)
+            self.reset_all()
 
     def activate_entry_price_stop_loss(self, current_price):
         price_diff = current_price - self.start_price

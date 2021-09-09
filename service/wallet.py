@@ -32,8 +32,12 @@ class Wallet(metaclass=Singleton):
     winning_trade = 0
     losing_trade = 0
 
+    total_winning_usdt = 0
     total_losing_usdt = 0
     total_losing_pct = 0
+
+    max_continuous_losing = 0
+    max_continuous_losing_overall = 0
 
     def __init__(self):
         if not IS_PAPER_TRADING:
@@ -75,13 +79,25 @@ class Wallet(metaclass=Singleton):
         self.total_completed_trade += 1
         if final_pnl >= 0:
             self.winning_trade += 1
+            self.max_continuous_losing = 0
+            self.total_winning_usdt += final_pnl
         else:
             self.losing_trade += 1
             self.total_losing_usdt += final_pnl
             self.total_losing_pct += (prev_percentage - self.pnl_percentage)
+            self.max_continuous_losing += 1
+            if self.max_continuous_losing > self.max_continuous_losing_overall:
+                self.max_continuous_losing_overall = self.max_continuous_losing
 
         if dora_trade_transaction.end_time is None:
             dora_trade_transaction.end_time = datetime.now()
+
+        if self.losing_trade > 0:
+            winning_p_trade = self.total_winning_usdt / self.total_completed_trade
+            losing_p_trade = self.total_losing_usdt / self.total_completed_trade
+        else:
+            winning_p_trade = 0
+            losing_p_trade = 0
 
         msg = (f"END OF TRANSACTION REPORT\n"
                f"===========================\n"
@@ -90,10 +106,12 @@ class Wallet(metaclass=Singleton):
                f"{'overall fund':<14}: {self.overall_wallet_fund:.4f} USD\n"
                f"{'overall pnl(%)':<14}: {self.pnl_percentage:.4f}%\n"
                f"{'total completed trade':<14}: {self.total_completed_trade}\n"
+               f"{'total winning usdt':<14}: {self.total_winning_usdt:.4f} USD\n"
                f"{'total losing trade':<14}: {self.losing_trade}\n"
                f"{'total losing usdt':<14}: {self.total_losing_usdt:.4f} USD\n"
                f"{'total losing (%)':<14}: -{self.total_losing_pct:.4f} %\n"
-               f"{'active trade':<14}: {self.active_trade}\n"
+               f"{'cont. losing streak':<14}: {self.max_continuous_losing_overall}\n"
+               f"{'avg trade (%)':<14}: {winning_p_trade - losing_p_trade :.4f}\n"
                f"{'leverage':<14}: {TRADE_LEVERAGE}\n"
                f"===========================\n")
         logger.info(msg)

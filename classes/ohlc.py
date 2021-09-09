@@ -6,6 +6,7 @@ class Ohlc(object):
     hband: float = 0
     lband: float = 0
     rsi8: float = 0
+    ema20: float = 0
 
     def __init__(self, unix, date, open: float, high: float, low: float,
                  close: float, volume_btc: float = None, volume_usdt: float = None, tradecount=None,
