@@ -77,7 +77,7 @@ class SignalBot(metaclass=Singleton):
             prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=21)
             ohlc.ema20 = self.get_latest_ema(self.candlestick_list, data_len, window=20)
-            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=30)
+            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=60)
             bb_result = SignalBot.get_bollinger_band(self.candlestick_list, data_len=28)
             ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
 
