@@ -244,3 +244,4 @@ class EToken:
     AAVE_USDT = 'aaveusdt'
     SOLUSDT = 'solusdt'
     XRPUSDT = 'xrpusdt'
+    ADAUSDT = 'adausdt'

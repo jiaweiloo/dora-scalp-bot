@@ -76,10 +76,10 @@ class Controller:
             # df = pd.read_csv("assets/avaxusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/xrpusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 5, 1, 0, 00)) & (df["date"] < datetime(2021, 5, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 7, 1, 0, 00)) & (df["date"] < datetime(2021, 7, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 0, 0))]
+            # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
@@ -96,8 +96,6 @@ class Controller:
                 divergence_result = self.signal_bot.candle_incoming(candlestick)
                 if isinstance(divergence_result, dict):
                     self.on_divergence(divergence_result)
-
-
 
                 # if self.check_safe_resample_5m(candlestick):
                 #     self.resample_candle_5m(self.list_5m)

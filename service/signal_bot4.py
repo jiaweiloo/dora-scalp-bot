@@ -229,6 +229,8 @@ class SignalBot(metaclass=Singleton):
     def safety_check(self, ohlc: Ohlc) -> Union[Divergence, Any]:
         """Check if RSI ever goes against the target (30 for bull, 70 for bear)"""
         divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
+
+        # and self.candlestick_list[-2].close > ohlc.ema
         if self.divergence == "bearish" and ohlc.close < ohlc.ema:
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
