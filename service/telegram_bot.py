@@ -101,7 +101,8 @@ class TelegramBot(metaclass=Singleton):
 
     def run_bot(self):
         # Run the bot
-        self.updater.start_polling()
+        if TELEGRAM_MODE == EMode.PRODUCTION:
+            self.updater.start_polling()
         # self.updater.idle()
 
 

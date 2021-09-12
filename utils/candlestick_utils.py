@@ -53,7 +53,7 @@ def date_to_timestamp(date: datetime):
 
 
 def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime, end_date: datetime = None,
-                             symbol=EToken.ADAUSDT):
+                             symbol=EToken.MATIC_USDT):
     start_timestamp = get_candlestick_start_time(date_to_timestamp(start_date), interval)
     date_fmt = '%d%b%y-%H{}%M'
     date_fmt2 = '%d-%m-%y %H:%M'
@@ -91,7 +91,7 @@ def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime
 
 
 async def main():
-    gen_candlestick_csv_data(CandlestickInterval.MIN1, datetime(2021, 1, 1, 00, 0))
+    gen_candlestick_csv_data(CandlestickInterval.MIN1, datetime(2021, 9, 1, 00, 0))
     print("---END---")
 
 

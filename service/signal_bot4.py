@@ -9,8 +9,6 @@ import pytz
 from scipy.signal import find_peaks
 from ta.momentum import RSIIndicator
 from ta.trend import EMAIndicator
-from ta.utils import _ema
-from ta.volatility import BollingerBands
 
 from classes.ohlc import Ohlc
 from classes.singleton import Singleton
@@ -23,6 +21,7 @@ from settings import MODE, INTERVAL
 from utils.chart_utils import CANDLESTICK_INTERVAL_MAP
 from utils.events import ee, ESignal, TelegramEventType, Trade
 from utils.general_utils import time_now_in_ms
+from utils.indicator_utils import get_bollinger_band, get_avg_true_range
 
 ZigzagIndicator = Optional[Literal['peak', 'trough']]
 Divergence = Optional[Literal['bullish', 'bearish']]
@@ -34,6 +33,7 @@ BUFFER_TIMEOUT_IN_SEC = 1
 class SignalBot(metaclass=Singleton):
     """Read chart data and indicate trade signals"""
     candlestick_list: List[Ohlc] = []
+    candlestick_htf_list: List[Ohlc] = []  # Higher time frame candles
     last_peak: Ohlc = None
     last_trough: Ohlc = None
     divergence: Divergence = None
@@ -52,7 +52,7 @@ class SignalBot(metaclass=Singleton):
         logger.info("start stream candles")
         now_in_ms = time_now_in_ms()
         interval_in_ms = self.interval_in_ms()
-        num_complete_candles = 250  # To calculate RSI
+        num_complete_candles = 251  # To calculate RSI
         start_time = now_in_ms - (now_in_ms % interval_in_ms) - (interval_in_ms * num_complete_candles)
         latest_complete_close_time_in_ms, latest_incomplete_close_time_in_ms \
             = await self.stream_candles(timestamp=start_time)
@@ -75,17 +75,18 @@ class SignalBot(metaclass=Singleton):
         result = None
         if len(self.candlestick_list) >= window:
             prev_ohlc: Ohlc = self.candlestick_list[-2]
-            ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=21)
+            ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
             ohlc.ema20 = self.get_latest_ema(self.candlestick_list, data_len, window=20)
             ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=60)
-            bb_result = SignalBot.get_bollinger_band(self.candlestick_list, data_len=28)
+            bb_result = get_bollinger_band(self.candlestick_list, data_len=28)
             ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
+            ohlc.atr = get_avg_true_range(self.candlestick_list, data_len=42)
 
             ee.emit(Trade.COMPLETE_CANDLESTICK_EVENT, ohlc)
 
             if MODE == EMode.PRODUCTION:
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close} RSI: {ohlc.rsi:.4f} "
-                            f"EMA 20: {ohlc.ema:.5f}")
+                            f"EMA 20: {ohlc.ema:.5f} ATR {ohlc.atr:.5f}")
 
             self.candlestick_list[-1] = ohlc
             if len(self.candlestick_list) >= data_len:
@@ -105,19 +106,31 @@ class SignalBot(metaclass=Singleton):
                         self.last_trough = prev_ohlc
         return result
 
-    def stats_requested(self, chat_id):
-        msg = (f"📊 STATS REQUESTED\n"
-               f"==========================\n"
-               f"{'interval':<12}: {INTERVAL} \n"
-               f"{'ohlc date':<12}: {self.candlestick_list[-1].date:%Y-%m-%d %H:%M}\n"
-               f"{'ohlc close':<12}: {self.candlestick_list[-1].close:.5f} USD\n"
-               f"{'ohlc rsi':<12}: {self.candlestick_list[-1].rsi:.4f} \n"
-               f"{'peak rsi':<12}: {(self.last_peak.rsi if self.last_peak else 0):.4f}\n"
-               f"{'peak date':<12}: {(self.last_peak.date if self.last_peak else datetime.now()):%Y-%m-%d %H:%M}\n"
-               f"{'trough rsi':<12}: {(self.last_trough.rsi if self.last_trough else 0):.4f}\n"
-               f"{'trough date':<12}: {(self.last_trough.date if self.last_trough else datetime.now()):%Y-%m-%d %H:%M}\n"
-               f"==========================\n")
-        telegram_bot.send_message(chat_id=chat_id, message=msg)
+    def higher_tf_candle_incoming(self, candle: ICandlestick):
+        """Process candlestick by higher time frame"""
+        ohlc = Ohlc(unix=candle['openTime'],
+                    date=datetime.fromtimestamp(candle['openTime'] / 1000, tz=pytz.UTC),
+                    open=float(candle['open']),
+                    high=float(candle['high']),
+                    low=float(candle['low']),
+                    close=float(candle['close']))
+        self.candlestick_htf_list.append(ohlc)
+        self.candlestick_htf_list = self.candlestick_htf_list[-250:]
+        data_len = 250
+        window = 14
+        result = None
+        if len(self.candlestick_htf_list) >= window:
+            # ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_htf_list, data_len, window=21)
+            # ohlc.ema20 = self.get_latest_ema(self.candlestick_htf_list, data_len, window=20)
+            ohlc.ema = self.get_latest_ema(self.candlestick_htf_list, data_len, window=30)
+            # bb_result = get_bollinger_band(self.candlestick_htf_list, data_len=28)
+            # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
+            # ohlc.atr = get_avg_true_range(self.candlestick_htf_list, data_len=42)
+
+            self.candlestick_htf_list[-1] = ohlc
+            if MODE == EMode.PRODUCTION:
+                logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema:.4f}")
+            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema:.4f}")
 
     @classmethod
     def get_latest_rsi(cls, data: List[Ohlc], data_len, window) -> int:
@@ -125,19 +138,6 @@ class SignalBot(metaclass=Singleton):
         close_price_list = pd.Series([obj.close for obj in data[-data_len:]])
         rsi_list = RSIIndicator(close=close_price_list, window=window).rsi()
         return rsi_list.iloc[-1]
-
-    @classmethod
-    def get_bollinger_band(cls, data: List[Ohlc], data_len, window=20):
-        """Calculate RSI from a pandas Series and return the latest RSI"""
-        close_price_list = pd.Series([obj.close for obj in data[-data_len:]])
-        indicator_bb = BollingerBands(close=close_price_list, window=window, window_dev=2)
-
-        # Add Bollinger Bands features
-        mavg_list = indicator_bb.bollinger_mavg()
-        hband_list = indicator_bb.bollinger_hband()
-        lband_list = indicator_bb.bollinger_lband()
-        bb_result = {'mavg': mavg_list.iloc[-1], 'hband': hband_list.iloc[-1], 'lband': lband_list.iloc[-1]}
-        return bb_result
 
     def get_latest_ema(self, data: List[Ohlc], data_len, window=50):
         """Calculate DEMA from a pandas Series and return the latest EMA"""
@@ -231,14 +231,35 @@ class SignalBot(metaclass=Singleton):
         divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
 
         # and self.candlestick_list[-2].close > ohlc.ema
+        price_diff = ohlc.close - ohlc.ema
+        percent_diff = abs(price_diff / ohlc.close * 100)
+
         if self.divergence == "bearish" and ohlc.close < ohlc.ema:
+            # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
+            #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
+            if percent_diff > 1:
+                logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
+                self.reset_all()
+                return
+
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(
                 f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} < ema21 {ohlc.ema:.4f}")
             self.reset_all()
             return divergence_result
-        if self.divergence == "bullish" and ohlc.close > ohlc.ema:
+        elif self.divergence == "bullish" and ohlc.close > ohlc.ema:
+            # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
+            #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
+            if percent_diff > 1:
+                logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
+                self.reset_all()
+                return
+
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(
@@ -303,6 +324,20 @@ class SignalBot(metaclass=Singleton):
 
     def get_latest_complete_candlestick_start_time(self):
         return self.get_latest_incomplete_candlestick_start_time() - self.interval_in_ms()
+
+    def stats_requested(self, chat_id):
+        msg = (f"📊 STATS REQUESTED\n"
+               f"==========================\n"
+               f"{'interval':<12}: {INTERVAL} \n"
+               f"{'ohlc date':<12}: {self.candlestick_list[-1].date:%Y-%m-%d %H:%M}\n"
+               f"{'ohlc close':<12}: {self.candlestick_list[-1].close:.5f} USD\n"
+               f"{'ohlc rsi':<12}: {self.candlestick_list[-1].rsi:.4f} \n"
+               f"{'peak rsi':<12}: {(self.last_peak.rsi if self.last_peak else 0):.4f}\n"
+               f"{'peak date':<12}: {(self.last_peak.date if self.last_peak else datetime.now()):%Y-%m-%d %H:%M}\n"
+               f"{'trough rsi':<12}: {(self.last_trough.rsi if self.last_trough else 0):.4f}\n"
+               f"{'trough date':<12}: {(self.last_trough.date if self.last_trough else datetime.now()):%Y-%m-%d %H:%M}\n"
+               f"==========================\n")
+        telegram_bot.send_message(chat_id=chat_id, message=msg)
 
     def __del__(self):
         logger.info("signal_bot deleted")

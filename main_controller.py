@@ -71,15 +71,16 @@ class Controller:
     def read_filepath_or_buffer(self, filepath_or_buffer=None):
         """Read chart data from a filepath or buffer"""
         if filepath_or_buffer is None:
-            df = pd.read_csv("assets/maticusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            # df = pd.read_csv("assets/maticusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/aaveusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/avaxusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/xrpusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
-            df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            df = pd.read_csv("assets/maticusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
+            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 5, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
@@ -143,6 +144,7 @@ class Controller:
         row = df.iloc[0]
         candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],
                        'openTime': int(row['openTime'].timestamp()*1000)}
+        # self.signal_bot.higher_tf_candle_incoming(candlestick)
         divergence_result = self.signal_bot.candle_incoming(candlestick)
         if isinstance(divergence_result, dict):
             self.on_divergence(divergence_result)
