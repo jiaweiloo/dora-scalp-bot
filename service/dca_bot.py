@@ -120,6 +120,7 @@ class DcaBot:
         self.process_candlestick(candlestick)
 
     def on_complete_candlestick_event(self, ohlc: Ohlc):
+        self.date = ohlc.date
         self.candlestick_list.append(ohlc)
         self.current_ohlc = ohlc
         # self.check_price_hit_target_profit(self.current_ohlc.close)

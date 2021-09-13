@@ -12,6 +12,7 @@ from service.exchange import exchange
 from service.logging import wallet_logger as logger
 from service.telegram_bot import telegram_bot
 from settings import IS_PAPER_TRADING, SYMBOL, MODE, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
+from utils.general_utils import write_to_csv
 
 
 def first(iterable, default=None):
@@ -118,6 +119,8 @@ class Wallet(metaclass=Singleton):
         telegram_bot.send_message(message=msg)
         dora_trade_transaction.pnl = final_pnl
         dora_trade_transaction.overall_fund = self.overall_wallet_fund
+        if MODE == EMode.TEST:
+            write_to_csv(dora_trade_transaction)
         self.save_txn_to_db(dora_trade_transaction)
 
     def get_active_trade(self):

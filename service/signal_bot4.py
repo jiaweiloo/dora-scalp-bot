@@ -271,8 +271,8 @@ class SignalBot(metaclass=Singleton):
         if self.divergence == "bearish" and ohlc.high > self.point0_price:
             self.point0_price = ohlc.high
             logger.info(f"NEW STOP LOSS {self.point0_price:.4f}")
-        elif self.divergence == "bullish" and ohlc.rsi > 70:
-            self.point0_price = ohlc.high
+        elif self.divergence == "bullish" and ohlc.low < self.point0_price:
+            self.point0_price = ohlc.low
             logger.info(f"NEW STOP LOSS {self.point0_price:.4f}")
 
     def reset_all(self):

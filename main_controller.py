@@ -16,6 +16,7 @@ from service.signal_bot4 import SignalBot
 from service.telegram_bot import telegram_bot
 from settings import MODE, SYMBOL, INTERVAL, IS_PAPER_TRADING, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
 from utils.events import ESignal, ee, Trade, TelegramEventType
+from utils.general_utils import init_backtest_file
 
 startTime = time.time()
 
@@ -53,6 +54,7 @@ class Controller:
     active_dca_bot_counter = 0
 
     def __init__(self):
+        init_backtest_file()
         self.signal_bot = SignalBot(origin="main_controller")
         ee.on(ESignal.DIVERGENCE_FOUND, self.on_divergence)
         ee.on(Trade.STOP_TRADE, self.pop_dca_bot)
@@ -71,16 +73,16 @@ class Controller:
     def read_filepath_or_buffer(self, filepath_or_buffer=None):
         """Read chart data from a filepath or buffer"""
         if filepath_or_buffer is None:
-            # df = pd.read_csv("assets/maticusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            df = pd.read_csv("assets/maticusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
+            # df = pd.read_csv("assets/maticusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/aaveusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/avaxusdt_01Jan21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = pd.read_csv("assets/xrpusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
-            df = pd.read_csv("assets/maticusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 5, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
+            df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             for _, row in df.iterrows():
