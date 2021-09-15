@@ -112,7 +112,7 @@ class Wallet(metaclass=Singleton):
                f"{'total losing usdt':<14}: {self.total_losing_usdt:.4f} USD\n"
                f"{'total losing (%)':<14}: -{self.total_losing_pct:.4f} %\n"
                f"{'cont. losing streak':<14}: {self.max_continuous_losing_overall}\n"
-               f"{'avg trade (%)':<14}: {winning_p_trade - losing_p_trade :.4f}\n"
+               f"{'avg trade':<14}: {winning_p_trade - losing_p_trade :.4f} USDT\n"
                f"{'leverage':<14}: {TRADE_LEVERAGE}\n"
                f"===========================\n")
         logger.info(msg)

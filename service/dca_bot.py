@@ -28,7 +28,7 @@ load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
 EXIT_PRICE_BUFFER = .0005
 
-TARGET_PROFIT_PERCENTAGE = 0.25
+TARGET_PROFIT_PERCENTAGE = 0.3
 STOP_LOSS_PERCENT = 1.5
 ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
 MAX_TIMEOUT_CANDLES = 4
@@ -112,7 +112,7 @@ class DcaBot:
         ee.on(TelegramEventType.STATS, self.stats_requested)
         ee.on(EExchange.CANDLESTICK_EVENT, self.on_candlestick_event)
         ee.on(Trade.COMPLETE_CANDLESTICK_EVENT, self.on_complete_candlestick_event)
-        self.dora_trade_transaction = DoraTradeTransaction(_id=self._id, symbol=SYMBOL, start_time=datetime.now(),
+        self.dora_trade_transaction = DoraTradeTransaction(_id=self._id, symbol=SYMBOL, start_time=self.date,
                                                            txn_type="", txn_interval=INTERVAL)
 
     def on_candlestick_event(self, i_candlestick_event: ICandlestickEvent):

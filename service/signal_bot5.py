@@ -77,8 +77,8 @@ class SignalBot(metaclass=Singleton):
         if len(self.candlestick_list) >= window:
             prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
-            ohlc.ema9 = self.get_latest_ema(self.candlestick_list, data_len, window=20)
-            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=60)
+            ohlc.ema9 = self.get_latest_ema(self.candlestick_list, data_len, window=10)
+            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=50)
             bb_result = get_bollinger_band(self.candlestick_list, data_len=28)
             ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
             # ohlc.atr = get_avg_true_range(self.candlestick_list, data_len=42)
@@ -90,7 +90,7 @@ class SignalBot(metaclass=Singleton):
                             f"EMA: {ohlc.ema:.5f}")
 
             # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close} RSI: {ohlc.rsi:.4f} "
-            #             f"EMA: {ohlc.ema:.5f} vwap {ohlc.vwap:.5f}")
+            #             f"EMA 60: {ohlc.ema:.5f} ema9 {ohlc.ema9:.5f}")
 
             self.candlestick_list[-1] = ohlc
             if len(self.candlestick_list) >= data_len:
@@ -238,15 +238,15 @@ class SignalBot(metaclass=Singleton):
         price_diff = ohlc.close - ohlc.ema
         percent_diff = abs(price_diff / ohlc.close * 100)
 
-        if self.divergence == "bearish" and ohlc.close < ohlc.ema:
+        if self.divergence == "bearish" and ohlc.ema9 < ohlc.ema:
             # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
             #     return
-            if percent_diff > 1:
-                logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
-                self.reset_all()
-                return
+            # if percent_diff > 1:
+            #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
 
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
@@ -254,15 +254,15 @@ class SignalBot(metaclass=Singleton):
                 f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} < ema21 {ohlc.ema:.4f}")
             self.reset_all()
             return divergence_result
-        elif self.divergence == "bullish" and ohlc.close > ohlc.ema:
+        elif self.divergence == "bullish" and ohlc.ema9 > ohlc.ema:
             # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
             #     return
-            if percent_diff > 1:
-                logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
-                self.reset_all()
-                return
+            # if percent_diff > 1:
+            #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
 
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)

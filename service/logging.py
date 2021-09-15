@@ -48,8 +48,12 @@ def get_telegram_bot_logger():
     return logger
 
 
+def get_indicator_logger():
+    return logging.getLogger('indicator-util')
+
 controller_logger = get_controller_logger()
 signal_bot_logger = get_signal_bot_logger()
 dca_bot_logger = get_dca_bot_logger()
 wallet_logger = get_wallet_logger()
 telegram_bot_logger = get_telegram_bot_logger()
+indicator_util_logger = get_indicator_logger()

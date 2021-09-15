@@ -12,7 +12,7 @@ from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick
 from service.dca_bot import DcaBot
 from service.logging import setup_logging, controller_logger as logger
-from service.signal_bot4 import SignalBot
+from service.signal_bot5 import SignalBot
 from service.telegram_bot import telegram_bot
 from settings import MODE, SYMBOL, INTERVAL, IS_PAPER_TRADING, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
 from utils.events import ESignal, ee, Trade, TelegramEventType
@@ -80,8 +80,8 @@ class Controller:
             # df = pd.read_csv("assets/xrpusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
@@ -90,7 +90,9 @@ class Controller:
                                'high': row['high'],
                                'low': row['low'],
                                'close': row['close'],
-                               'openTime': int(row['date'].timestamp()*1000)}
+                               'openTime': int(row['date'].timestamp() * 1000),
+                               'volume': row['volume'],
+                               'quoteAssetVolume': row['quoteAssetVolume']}
 
                 # Must process price data after candles
                 for dca_bot in self.dca_bots:
@@ -111,7 +113,7 @@ class Controller:
             logger.info("--end--")
 
     def check_safe_resample_15m(self, _1m_candlestick_dict: ICandlestick):
-        minute = int(datetime.fromtimestamp(_1m_candlestick_dict['openTime']/1000).strftime("%M"))
+        minute = int(datetime.fromtimestamp(_1m_candlestick_dict['openTime'] / 1000).strftime("%M"))
         if minute % 15 == 0:
             self.list_15m = []
         self.list_15m.append(_1m_candlestick_dict)
@@ -120,18 +122,19 @@ class Controller:
     def resample_candle_15m(self, candles: List[ICandlestick]):
         ohlc = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'}
         df = pd.DataFrame(candles)
-        df['openTime'] = pd.to_datetime(df['openTime']/1000, unit='s')
+        df['openTime'] = pd.to_datetime(df['openTime'] / 1000, unit='s')
         df = df.resample(rule='15Min', on='openTime').apply(ohlc)
         df['openTime'] = df.index
         row = df.iloc[0]
         candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],
-                       'openTime': int(row['openTime'].timestamp() * 1000)}
+                       'openTime': int(row['openTime'].timestamp() * 1000), 'volume': row['volume'],
+                       'quoteAssetVolume': row['quoteAssetVolume']}
         divergence_result = self.signal_bot.candle_incoming(candlestick)
         if isinstance(divergence_result, dict):
             self.on_divergence(divergence_result)
 
     def check_safe_resample_5m(self, _1m_candlestick_dict: ICandlestick):
-        minute = int(datetime.fromtimestamp(_1m_candlestick_dict['openTime']/1000).strftime("%M"))
+        minute = int(datetime.fromtimestamp(_1m_candlestick_dict['openTime'] / 1000).strftime("%M"))
         if minute % 5 == 0:
             self.list_5m = []
         self.list_5m.append(_1m_candlestick_dict)
@@ -140,12 +143,13 @@ class Controller:
     def resample_candle_5m(self, candles: List[ICandlestick]):
         ohlc = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'}
         df = pd.DataFrame(candles)
-        df['openTime'] = pd.to_datetime(df['openTime']/1000, unit='s')
+        df['openTime'] = pd.to_datetime(df['openTime'] / 1000, unit='s')
         df = df.resample(rule='5Min', on='openTime').apply(ohlc)
         df['openTime'] = df.index
         row = df.iloc[0]
         candlestick = {'open': row['open'], 'high': row['high'], 'low': row['low'], 'close': row['close'],
-                       'openTime': int(row['openTime'].timestamp()*1000)}
+                       'openTime': int(row['openTime'].timestamp() * 1000), 'volume': row['volume'],
+                       'quoteAssetVolume': row['quoteAssetVolume']}
         # self.signal_bot.higher_tf_candle_incoming(candlestick)
         divergence_result = self.signal_bot.candle_incoming(candlestick)
         if isinstance(divergence_result, dict):

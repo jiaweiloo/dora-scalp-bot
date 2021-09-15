@@ -150,3 +150,6 @@ class Exchange(metaclass=Singleton):
 
 
 exchange = Exchange(API_KEY, SECRET_KEY)
+
+if __name__ == '__main__':
+    print(exchange.get_candlestick())

@@ -6,12 +6,15 @@ class Ohlc(object):
     hband: float = 0
     lband: float = 0
     rsi8: float = 0
-    ema20: float = 0
+    ema9: float = 0
     atr: float = 0
+    vwap: float = 0
+    quoteAssetVolume: float = 0
 
     def __init__(self, unix, date, open: float, high: float, low: float,
                  close: float, volume_btc: float = None, volume_usdt: float = None, tradecount=None,
-                 rsi=0, peak=False, trough=False, valid_pt=False, ema=None, dema=None, tema=None):
+                 rsi=0, peak=False, trough=False, valid_pt=False, ema=None, dema=None, tema=None,
+                 quoteAssetVolume: float = 0):
         self.unix = unix
         self.date = date
         self.symbol = SYMBOL
@@ -29,6 +32,7 @@ class Ohlc(object):
         self.ema = ema
         self.dema = dema
         self.tema = tema
+        self.quoteAssetVolume=quoteAssetVolume
 
     def __str__(self):
         return str(self.__class__) + ": " + str(self.__dict__)

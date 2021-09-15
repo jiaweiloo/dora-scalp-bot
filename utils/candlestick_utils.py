@@ -67,7 +67,7 @@ def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime
         end_timestamp = get_latest_complete_candlestick_start_time(interval)
     write_file_path = build_path([BASE_DIR, 'assets', f'{filename}.csv'])
     with codecs.open(write_file_path, 'w', 'utf-8') as f:
-        f.write('date,open,high,low,close\n')
+        f.write('date,open,high,low,close,volume,quoteAssetVolume\n')
     limit = 1000
     while start_timestamp < end_timestamp:
         candlesticks = exchange.get_candlestick(interval, start_timestamp, end_timestamp, limit, symbol=symbol)
@@ -77,7 +77,7 @@ def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime
                     break
                 formatted_date = datetime.fromtimestamp(candlestick['openTime'] / 1000).strftime(DEFAULT_FORMAT)
                 line = f"{formatted_date},{candlestick['open']},{candlestick['high']},{candlestick['low']}," \
-                       f"{candlestick['close']}"
+                       f"{candlestick['close']},{candlestick['volume']},{candlestick['quoteAssetVolume']}"
                 f.write(line)
                 f.write('\n')
         start_timestamp = candlesticks[-1]['openTime']
@@ -91,7 +91,7 @@ def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime
 
 
 async def main():
-    gen_candlestick_csv_data(CandlestickInterval.MIN1, datetime(2021, 9, 1, 00, 0))
+    gen_candlestick_csv_data(CandlestickInterval.MIN1, datetime(2021, 1, 1, 00, 0))
     print("---END---")
 
 
