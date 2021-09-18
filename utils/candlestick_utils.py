@@ -91,7 +91,7 @@ def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime
 
 
 async def main():
-    gen_candlestick_csv_data(CandlestickInterval.MIN1, datetime(2021, 1, 1, 00, 0))
+    gen_candlestick_csv_data(CandlestickInterval.MIN1, datetime(2021, 9, 1, 00, 0))
     print("---END---")
 
 

@@ -80,12 +80,14 @@ class Controller:
             # df = pd.read_csv("assets/xrpusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
+            # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
-            for _, row in df.iterrows():
+            df_dict = df.to_dict('records')
+            # for _, row in df.iterrows():
+            for row in df_dict:
                 candlestick = {'open': row['open'],
                                'high': row['high'],
                                'low': row['low'],
@@ -110,7 +112,9 @@ class Controller:
 
                 # if _id is not None:
                 #     self.pop_dca_bot(_id)
-            logger.info("--end--")
+            td = timedelta(seconds=round(get_uptime()))
+            timeup = f"{(td.seconds // 60) % 60}mins, {td.seconds % 60}secs"
+            logger.info(f"--end-- {timeup}")
 
     def check_safe_resample_15m(self, _1m_candlestick_dict: ICandlestick):
         minute = int(datetime.fromtimestamp(_1m_candlestick_dict['openTime'] / 1000).strftime("%M"))
