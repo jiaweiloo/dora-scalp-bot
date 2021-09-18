@@ -12,6 +12,7 @@ from service.exchange import exchange
 from service.logging import wallet_logger as logger
 from service.telegram_bot import telegram_bot
 from settings import IS_PAPER_TRADING, SYMBOL, MODE, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
+from utils.events import ee, TelegramEventType
 from utils.general_utils import write_to_csv
 
 
@@ -46,6 +47,7 @@ class Wallet(metaclass=Singleton):
             self.overall_wallet_fund = usdt_ibalance_object['availableBalance']
         self.starting_amount = self.overall_wallet_fund
         self.tradeable_amount = self.starting_amount / MAX_CONCURRENT_TRADE
+        ee.on(TelegramEventType.STATS, self.stats_requested)
 
     def get_start_amount(self):
         if self.active_trade == 0:
