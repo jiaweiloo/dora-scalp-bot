@@ -28,12 +28,13 @@ load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
 EXIT_PRICE_BUFFER = .0005
 
-TARGET_PROFIT_PERCENTAGE = 0.3
+TARGET_PROFIT_PERCENTAGE = 0.25
 STOP_LOSS_PERCENT = 1.5
 ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
 MAX_TIMEOUT_CANDLES = 4
 HARD_STOP_LOSS_PERCENT = 0.003
 REVERSE_EMA_COUNTER_LIMIT = 3
+HARD_SL_ENTRY = 1
 
 
 class DcaBot:
@@ -225,6 +226,9 @@ class DcaBot:
         # if self.candles_count_passed_entry < 3:
         #     return
 
+        price_diff = ohlc.close - self.start_price
+        percent_diff = abs(price_diff / self.start_price * 100)
+
         if self.divergence == "bullish":
             if ohlc.close < self.stop_loss_price:
                 # logger.info("STOP LOSS! NON DYNAMIC")
@@ -239,12 +243,18 @@ class DcaBot:
             else:
                 self.stop_loss_timeout_candles = 0
 
+            if percent_diff >= HARD_SL_ENTRY:
+                logger.info("HIT STOP LOSS FROM HARD SL")
+                self.close_long_position(ohlc.close, 100)
+                self.reset_all()
+
             if ohlc.close < ohlc.ema and (
                     self.current_position_on_ema is None or self.current_position_on_ema == 'above'):
                 self.current_position_on_ema = 'below'
                 self.reverse_ema_counter += 1
             elif ohlc.close > ohlc.ema:
                 self.current_position_on_ema = 'above'
+
 
             # if ohlc.close < ohlc.ema and self.reverse_ema_counter >= REVERSE_EMA_COUNTER_LIMIT:
             #         logger.info("STOP LOSS! RECROSS EMA HIT LIMIT")
@@ -268,6 +278,11 @@ class DcaBot:
                     self.stop_loss_timeout_candles += 1
             else:
                 self.stop_loss_timeout_candles = 0
+
+            if percent_diff >= HARD_SL_ENTRY:
+                logger.info("HIT STOP LOSS FROM HARD SL")
+                self.close_short_position(ohlc.close, 100)
+                self.reset_all()
 
             if ohlc.close > ohlc.ema and (self.current_position_on_ema is None or self.current_position_on_ema == 'below'):
                 self.current_position_on_ema = 'above'
