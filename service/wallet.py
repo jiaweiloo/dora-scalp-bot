@@ -6,7 +6,7 @@ from binance_f.model import OrderSide, PositionSide, OrderType, WorkingType
 
 from classes.singleton import Singleton
 from custom_types.controller_type import EMode
-from custom_types.exchange_type import IPosition, IBalance, EToken
+from custom_types.exchange_type import IPosition, IBalance, EToken, EWalletToken
 from database.dora_trade_transaction import DoraTradeTransaction, DoraTradeTransactionDAL
 from service.exchange import exchange
 from service.logging import wallet_logger as logger
@@ -168,6 +168,23 @@ class Wallet(metaclass=Singleton):
                                                             x['positionSide'] == position_side))
         return position
 
+    def get_bal_by_symbol(self, symbol=EWalletToken.USDT):
+        retry = 0
+        bal_list = []
+        while True and retry <= 3:
+            try:
+                bal_list: List[IBalance] = exchange.get_balance()
+                print(bal_list)
+            except Exception as ex:
+                logger.error(f"get_bal_by_symbol() failed {retry}...\n"
+                             f"{ex}")
+                time.sleep(2)
+                retry += 1
+                continue
+            break
+        balance: IBalance = first(x for x in bal_list if x['asset'].upper() == symbol)
+        return balance
+
     def open_long_position(self, quantity_in_coin: float, order_id: str = None):
         retry = 0
         quantity_in_coin = TRADE_LEVERAGE * quantity_in_coin
@@ -239,6 +256,24 @@ class Wallet(metaclass=Singleton):
                 retry += 1
                 continue
             break
+
+    def stats_requested(self, chat_id):
+        usdt_ibalance_object = self.get_bal_by_symbol()
+        bnb_bal = wallet.get_bal_by_symbol(symbol=EWalletToken.BNB)
+        overall_wallet_fund = usdt_ibalance_object['availableBalance']
+
+        msg = (f"📊 WALLET STATS\n"
+               f"=======================\n"
+               f"{'overall_wallet_fund':<15}: {overall_wallet_fund:.4f} USD \n"
+               f"{'BNB bal':<15}: {bnb_bal['availableBalance']:.4f} BNB \n"
+               f"{'cumulative pnl':<14}: {self.cumulative_pnl:.4f} USD\n"
+               f"{'overall pnl(%)':<14}: {self.pnl_percentage:.4f}%\n"
+               f"{'total losing trade':<14}: {self.losing_trade}\n"
+               f"{'total completed trade':<14}: {self.total_completed_trade}\n"
+               f"{'active trade':<14}: {self.active_trade}\n"
+               f"{'leverage':<14}: {TRADE_LEVERAGE}\n"
+               f"=======================\n")
+        telegram_bot.send_message(chat_id=chat_id, message=msg)
 
 
 wallet = Wallet()

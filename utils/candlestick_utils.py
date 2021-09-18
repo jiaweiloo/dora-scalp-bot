@@ -53,7 +53,7 @@ def date_to_timestamp(date: datetime):
 
 
 def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime, end_date: datetime = None,
-                             symbol=EToken.MATIC_USDT):
+                             symbol=EToken.XRPUSDT):
     start_timestamp = get_candlestick_start_time(date_to_timestamp(start_date), interval)
     date_fmt = '%d%b%y-%H{}%M'
     date_fmt2 = '%d-%m-%y %H:%M'

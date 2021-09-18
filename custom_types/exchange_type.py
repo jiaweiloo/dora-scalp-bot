@@ -245,3 +245,8 @@ class EToken:
     SOLUSDT = 'solusdt'
     XRPUSDT = 'xrpusdt'
     ADAUSDT = 'adausdt'
+
+
+class EWalletToken:
+    USDT = 'USDT'
+    BNB = 'BNB'

@@ -13,7 +13,7 @@ from Binance_futures_python.binance_f.subscriptionclient import SubscriptionClie
 from classes.singleton import Singleton
 from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick, IPostOrder, IAggregateTradeEvent, IPosition, \
-    IBalance, ICandlestickEvent, ICancelAllOrders, IOrder
+    IBalance, ICandlestickEvent, ICancelAllOrders, IOrder, IMarkPrice, IAccountTrade
 from settings import SYMBOL, INTERVAL, EXCHANGE_MODE
 from utils.events import ee, EExchange
 
@@ -107,6 +107,14 @@ class Exchange(metaclass=Singleton):
         result = self.req_client.get_income_history(symbol=symbol, incomeType=incomeType,
                                                     startTime=startTime, endTime=endTime, limit=limit)
         return (result)
+
+    def get_account_trade_list(self, start_time: int = None, end_time: int = None) -> List[IAccountTrade]:
+        result = self.req_client.get_account_trades(symbol=SYMBOL, startTime=start_time, endTime=end_time)
+        return Exchange.parse_obj_list_to_dict_list(result)
+
+    def get_mark_price(self, symbol) -> IMarkPrice:
+        result = self.req_client.get_mark_price(symbol)
+        return Exchange.parse_obj_to_dict(result)
 
     @staticmethod
     def on_aggregate_trade_event(data_type: SubscribeMessageType, event: any):
