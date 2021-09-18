@@ -29,6 +29,7 @@ Divergence = Optional[Literal['bullish', 'bearish']]
 CANDLESTICK_LIMIT = 499
 BUFFER_TIMEOUT_IN_SEC = 1
 
+IGNORE_SIGNAL_PERCENTAGE = 50
 
 class SignalBot(metaclass=Singleton):
     """Read chart data and indicate trade signals"""
@@ -78,7 +79,7 @@ class SignalBot(metaclass=Singleton):
             prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
             ohlc.ema9 = self.get_latest_ema(self.candlestick_list, data_len, window=10)
-            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=50)
+            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=20)
             # bb_result = get_bollinger_band(self.candlestick_list, data_len=28)
             # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
             # ohlc.atr = get_avg_true_range(self.candlestick_list, data_len=42)
@@ -238,7 +239,14 @@ class SignalBot(metaclass=Singleton):
         price_diff = ohlc.close - ohlc.ema
         percent_diff = abs(price_diff / ohlc.close * 100)
 
+        price_diff_fr_sl = ohlc.close - self.point0_price
+        percent_diff_fr_sl = abs(price_diff_fr_sl / ohlc.close * 100)
+
         if self.divergence == "bearish" and ohlc.ema9 < ohlc.ema:
+            if percent_diff_fr_sl > IGNORE_SIGNAL_PERCENTAGE:
+                logger.info("PRICE DUMP HARD, DROP SIGNAL")
+                self.reset_all()
+                return
             # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
@@ -255,6 +263,10 @@ class SignalBot(metaclass=Singleton):
             self.reset_all()
             return divergence_result
         elif self.divergence == "bullish" and ohlc.ema9 > ohlc.ema:
+            if percent_diff_fr_sl > IGNORE_SIGNAL_PERCENTAGE:
+                logger.info("PRICE PUMP HARD, DROP SIGNAL")
+                self.reset_all()
+                return
             # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
