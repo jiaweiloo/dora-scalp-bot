@@ -88,7 +88,7 @@ class SignalBot(metaclass=Singleton):
         start_time = now_in_ms - (now_in_ms % interval_in_ms) - (interval_in_ms * num_complete_candles)
         self.stream_candles(timestamp=start_time)
 
-    def candle_incoming(self, candle: ICandlestick, ohlc: Ohlc = None):
+    def candle_incoming(self, candle: Optional[ICandlestick], ohlc: Ohlc = None):
         """Process trade data by bigger row"""
         if ohlc is None:
             ohlc = Ohlc(unix=candle['openTime'], date=datetime.fromtimestamp(candle['openTime'] / 1000, tz=pytz.UTC),
