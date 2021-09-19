@@ -67,9 +67,6 @@ class Controller:
                                           f"{IS_PAPER_TRADING=}\n"
                                           f"{TRADE_LEVERAGE=}")
 
-    async def run_signal_bot(self):
-        await self.signal_bot.run()
-
     def read_filepath_or_buffer(self, filepath_or_buffer=None):
         """Read chart data from a filepath or buffer"""
         if filepath_or_buffer is None:
@@ -80,9 +77,9 @@ class Controller:
             # df = pd.read_csv("assets/xrpusdt_01Sep21-00꞉00.csv", parse_dates=["date"], date_parser=dateparse)
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
+            # df = df[(df["date"] >= datetime(2021, 5, 1, 0, 00)) & (df["date"] < datetime(2021, 5, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
+            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             df_dict = df.to_dict('records')
@@ -212,9 +209,9 @@ async def main():
     if MODE == EMode.PRODUCTION:
         with ThreadPoolExecutor(max_workers=1) as executor:
             event_loop = asyncio.get_event_loop()
-            await asyncio.gather(controller.run_signal_bot(),
-                                 event_loop.run_in_executor(executor, telegram_bot.run_bot)
-                                 )
+            await asyncio.gather(
+                event_loop.run_in_executor(executor, telegram_bot.run_bot)
+            )
     elif MODE == EMode.TEST:
         controller.read_filepath_or_buffer()
 

@@ -31,7 +31,7 @@ class Exchange(metaclass=Singleton):
             self.sub_client = SubscriptionClient(api_key=api_key, secret_key=secret_key)
             self.sub_client.subscribe_aggregate_trade_event(SYMBOL, Exchange.on_aggregate_trade_event,
                                                             Exchange.error)
-            self.sub_client.subscribe_candlestick_event(SYMBOL, CandlestickInterval.MIN5,
+            self.sub_client.subscribe_candlestick_event(SYMBOL, INTERVAL,
                                                         Exchange.on_candlestick_event, Exchange.error)
 
     def get_candlestick(self, interval=CandlestickInterval.MIN1,
