@@ -8,7 +8,7 @@ import os
 
 from time import sleep
 from datetime import datetime
-from typing import Literal, Union, List
+from typing import Literal, Union, List, Optional
 from dotenv import load_dotenv
 
 from classes.ohlc import Ohlc
@@ -26,39 +26,26 @@ from utils.general_utils import time_now_in_ms
 
 load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
-EXIT_PRICE_BUFFER = .0005
 
-TARGET_PROFIT_PERCENTAGE = 0.25
-STOP_LOSS_PERCENT = 1.5
-ENTRY_PRICE_STOP_LOSS_PERCENT = 0.3
-MAX_TIMEOUT_CANDLES = 4
-HARD_STOP_LOSS_PERCENT = 0.003
-REVERSE_EMA_COUNTER_LIMIT = 3
-HARD_SL_ENTRY = 1
+TARGET_PROFIT_PERCENTAGE = 0.0025
+STOP_LOSS_PERCENTAGE = 0.01
 
 
 class DcaBot:
     dora_trade_transaction: DoraTradeTransaction
     _id = None
     date = datetime.now()
-    divergence: Literal['bullish', 'bearish'] = None
-    start_price = 0
-    top_price = 0
+    divergence: Optional[Literal['bullish', 'bearish']] = None
+    entry_price = 0
     avg_buyin_price = 0
-    last_buyin_price = 0
     stop_loss_price = 0
-    hard_stop_loss_price = 0
     take_profit_price = 0
 
-    next_safety_order_price = 0
     base_order_complete = False
-
     current_ohlc: Ohlc = None
-    prev_ohlc: Ohlc = None
-    entry_price_stoploss = False
+    candlestick_list: List[Ohlc] = []
 
     fee_items: IFeeCalc = {'trade_start_time': None, 'order_ids': None}
-    stop_loss_timeout_candles = 0
 
     # Test wallet part
     trade_bot_balance = 600
@@ -74,7 +61,6 @@ class DcaBot:
     full_owed_coin_amount = 0
     cumulative_pnl = 0
     cummulative_pnl_pct = 0
-    current_price = 0
 
     end_counter = 0
 
@@ -82,20 +68,12 @@ class DcaBot:
     reverse_ema_counter = 0
     current_position_on_ema: Literal['above', 'below'] = None
 
-    candlestick_list: List[Ohlc] = []
-
     def __init__(self, _id, divergence, date, ohlc: Ohlc, stop_loss_price):
         self._id = _id
         self.date = date
         self.divergence = divergence
         self.current_ohlc = ohlc
         self.stop_loss_price = stop_loss_price
-
-        if self.divergence == "bullish":
-            self.hard_stop_loss_price = self.stop_loss_price * (1 - HARD_STOP_LOSS_PERCENT)
-        elif self.divergence == "bearish":
-            self.hard_stop_loss_price = self.stop_loss_price * (1 + HARD_STOP_LOSS_PERCENT)
-
         self.trade_bot_balance = wallet.get_start_amount()
         self.fee_items = {'trade_start_time': time_now_in_ms(), 'order_ids': []}
         if self.trade_bot_balance == 0:
@@ -107,7 +85,7 @@ class DcaBot:
                     f"{date:%Y-%m-%d %H:%M:%S}\n"
                     f"{'_id':<15}: {self._id} \n"
                     f"{'divergence':<15}: {self.divergence} \n"
-                    f"{'start_price':<15}: {self.start_price} usd\n"
+                    f"{'start_price':<15}: {self.entry_price} usd\n"
                     f"{'trade_bot_balance':<15}: {self.trade_bot_balance:.4f} usd\n")
         self.end_counter = 0
         ee.on(TelegramEventType.STATS, self.stats_requested)
@@ -122,13 +100,10 @@ class DcaBot:
 
     def on_complete_candlestick_event(self, ohlc: Ohlc):
         self.date = ohlc.date
-        self.candlestick_list.append(ohlc)
         self.current_ohlc = ohlc
-        # self.check_price_hit_target_profit(self.current_ohlc.close)
+        self.candlestick_list.append(ohlc)
         self.check_hit_stop_loss(self.current_ohlc)
-        # self.adjust_stop_loss(ohlc)
         self.candlestick_list = self.candlestick_list[-4:]
-        # self.candles_count_passed_entry += 1
 
     def process_candlestick(self, candlestick: Union[ICandlestick, ICandlestickEventData]):
         if self.divergence is None:
@@ -141,249 +116,63 @@ class DcaBot:
             self.end_counter += 1
             return self._id
 
-        self.current_price = float(candlestick['close'])
         if MODE == EMode.TEST:
             self.date = datetime.utcfromtimestamp(candlestick['openTime'] / 1000)
-            # logger.info(f"{self.date:%Y-%m-%d %H:%M:%S} close: {self.current_price}")
             self.process_current_price(candlestick['open'])
             self.process_current_price(candlestick['high'])
             self.process_current_price(candlestick['low'])
         else:
             self.date = datetime.fromtimestamp(candlestick['startTime'] / 1000)
-            self.process_current_price(self.current_price)
+            self.process_current_price(float(candlestick['close']))
 
     def process_current_price(self, current_price):
         self.trigger_base_order(current_price)
         self.check_price_hit_target_profit(current_price)
-        # self.check_price_hit_hard_stop_loss(current_price)
-        # self.check_hit_stop_loss(current_price)
-        # self.activate_entry_price_stop_loss(current_price)
 
     def trigger_base_order(self, current_price):
         if self.base_order_complete:
             return
         self.base_order_complete = True
-        self.start_price = current_price
+        self.entry_price = current_price
 
         if self.divergence == "bullish":
-            self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
+            self.take_profit_price = current_price * (1 + TARGET_PROFIT_PERCENTAGE)
+            self.stop_loss_price = current_price * (1 - STOP_LOSS_PERCENTAGE)
             self.open_long_position(current_price, self.trade_bot_balance)
         elif self.divergence == "bearish":
-            self.take_profit_price = current_price + ((current_price - self.stop_loss_price) * 3)
+            self.take_profit_price = current_price * (1 - TARGET_PROFIT_PERCENTAGE)
+            self.stop_loss_price = current_price * (1 + STOP_LOSS_PERCENTAGE)
             self.open_short_position(current_price, self.trade_bot_balance)
 
         logger.info(f"INITIATE ORDER {self.date:%Y-%m-%d %H:%M:%S}\n"
-                    f"Current Price: {current_price:.4f}\n"
-                    f"Stop Loss: {self.stop_loss_price:.4f}, Hard SL: {self.hard_stop_loss_price:.4f}\n"
-                    f"TP: {self.take_profit_price:.4f}")
+                    f"{'Current Price':<15}: {current_price:.04f}\n"
+                    f"{'Take Profit':<15}: {self.take_profit_price:.04f}\n"
+                    f"{'Stop Loss':<15}: {self.stop_loss_price:.04f}")
 
     def check_price_hit_target_profit(self, current_price):
-        if self.divergence is None or len(self.candlestick_list) < 3:
+        if self.divergence is None:
             return
 
-        price_diff = current_price - self.start_price
-        percent_diff = price_diff / self.start_price * 100
-
-        # if self.divergence == "bullish" and self.current_ohlc.hband != 0 and current_price > self.current_ohlc.hband:
-        #     logger.info(f"TP: {self.current_ohlc.hband=:.5f} {current_price=:.5f}")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and self.current_ohlc.lband != 0 and current_price < self.current_ohlc.lband:
-        #     logger.info(f"TP: {self.current_ohlc.hband=:.5f} {current_price=:.5f}")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
-        if self.divergence == "bullish" and (
-                percent_diff >= TARGET_PROFIT_PERCENTAGE or current_price >= self.take_profit_price):
-            logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
-            # if MODE == EMode.TEST:
-            #     current_price = self.start_price * 1.005
+        if self.divergence == "bullish" and current_price >= self.take_profit_price:
+            if MODE == EMode.TEST:
+                current_price = self.take_profit_price
             self.close_long_position(current_price, 100)
             self.reset_all()
-        elif self.divergence == "bearish" and (
-                percent_diff <= -TARGET_PROFIT_PERCENTAGE or current_price <= self.take_profit_price):
-            logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
-            # if MODE == EMode.TEST:
-            #     current_price = self.start_price * 0.995
+        elif self.divergence == "bearish" and current_price <= self.take_profit_price:
+            if MODE == EMode.TEST:
+                current_price = self.take_profit_price
             self.close_short_position(current_price, 100)
             self.reset_all()
-        #
-        # if self.divergence == "bullish" and self.current_ohlc.rsi > 70:
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and self.current_ohlc.rsi < 30:
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-        #
-        # if self.divergence == "bullish" and self.current_ohlc.tema < self.current_ohlc.dema:
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and self.current_ohlc.tema > self.current_ohlc.dema:
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
 
     def check_hit_stop_loss(self, ohlc: Ohlc):
-        # if self.candles_count_passed_entry < 3:
-        #     return
-
-        price_diff = ohlc.close - self.start_price
-        percent_diff = abs(price_diff / self.start_price * 100)
-
-        if self.divergence == "bullish":
-            if ohlc.close < self.stop_loss_price:
-                # logger.info("STOP LOSS! NON DYNAMIC")
-                # self.close_long_position(ohlc.close, 100)
-                # self.reset_all()
-                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
-                    logger.info("STOP LOSS!")
-                    self.close_long_position(ohlc.close, 100)
-                    self.reset_all()
-                else:
-                    self.stop_loss_timeout_candles += 1
-            else:
-                self.stop_loss_timeout_candles = 0
-
-            if percent_diff >= HARD_SL_ENTRY:
-                logger.info("HIT STOP LOSS FROM HARD SL")
-                self.close_long_position(ohlc.close, 100)
-                self.reset_all()
-
-            if ohlc.close < ohlc.ema_slow and (
-                    self.current_position_on_ema is None or self.current_position_on_ema == 'above'):
-                self.current_position_on_ema = 'below'
-                self.reverse_ema_counter += 1
-            elif ohlc.close > ohlc.ema_slow:
-                self.current_position_on_ema = 'above'
-
-
-            # if ohlc.close < ohlc.ema and self.reverse_ema_counter >= REVERSE_EMA_COUNTER_LIMIT:
-            #         logger.info("STOP LOSS! RECROSS EMA HIT LIMIT")
-            #         self.close_long_position(ohlc.close, 100)
-            #         self.reset_all()
-
-            # if ohlc.close < ohlc.ema20:
-            #     logger.info("STOP LOSS HIT EMA 20!")
-            #     self.close_long_position(ohlc.close, 100)
-            #     self.reset_all()
-        elif self.divergence == "bearish":
-            if ohlc.close > self.stop_loss_price:
-                # logger.info("STOP LOSS! NON DYNAMIC")
-                # self.close_short_position(ohlc.close, 100)
-                # self.reset_all()
-                if self.stop_loss_timeout_candles >= MAX_TIMEOUT_CANDLES - 1:
-                    logger.info("STOP LOSS!")
-                    self.close_short_position(ohlc.close, 100)
-                    self.reset_all()
-                else:
-                    self.stop_loss_timeout_candles += 1
-            else:
-                self.stop_loss_timeout_candles = 0
-
-            if percent_diff >= HARD_SL_ENTRY:
-                logger.info("HIT STOP LOSS FROM HARD SL")
-                self.close_short_position(ohlc.close, 100)
-                self.reset_all()
-
-            if ohlc.close > ohlc.ema_slow and (self.current_position_on_ema is None or self.current_position_on_ema == 'below'):
-                self.current_position_on_ema = 'above'
-                self.reverse_ema_counter += 1
-            elif ohlc.close < ohlc.ema_slow:
-                self.current_position_on_ema = 'below'
-
-            # if ohlc.close > ohlc.ema and self.reverse_ema_counter >= REVERSE_EMA_COUNTER_LIMIT:
-            #         logger.info("STOP LOSS! RECROSS EMA HIT LIMIT")
-            #         self.close_short_position(ohlc.close, 100)
-            #         self.reset_all()
-
-            # if ohlc.close > ohlc.ema20:
-            #     logger.info("STOP LOSS HIT EMA 20!")
-            #     self.close_short_position(ohlc.close, 100)
-            #     self.reset_all()
-
-        # price_diff = current_price - self.start_price
-        # percent_diff = price_diff / self.start_price * 100
-        #
-        # if self.divergence == "bullish" and percent_diff < -STOP_LOSS_PERCENT:
-        #     logger.info("STOP LOSS!")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and percent_diff > STOP_LOSS_PERCENT:
-        #     logger.info("STOP LOSS!")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-        #
-        # if self.entry_price_stoploss:
-        #     if self.divergence == "bullish" and current_price < self.start_price:
-        #         logger.info("STOP LOSS @ Entry price!")
-        #         self.close_long_position(current_price, 100)
-        #         self.reset_all()
-        #     elif self.divergence == "bearish" and current_price > self.start_price:
-        #         logger.info("STOP LOSS @ Entry price!")
-        #         self.close_short_position(current_price, 100)
-        #         self.reset_all()
-
-        # if self.divergence == "bullish" and current_price < self.current_ohlc.dema and current_price < self.current_ohlc.lband:
-        #     logger.info("STOP LOSS! BELOW DEMA")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and current_price > self.current_ohlc.dema and current_price > self.current_ohlc.hband:
-        #     logger.info("STOP LOSS! ABOVE DEMA")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
-        # if self.divergence == "bullish" and current_price < self.current_ohlc.lband:
-        #     logger.info(f"STOP LOSS HIT BB! {self.current_ohlc.lband=}")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and current_price > self.current_ohlc.hband:
-        #     logger.info(f"STOP LOSS HIT BB! {self.current_ohlc.hband=}")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
-        # if self.divergence == "bullish" and current_price < self.current_ohlc.tema:
-        #     logger.info("STOP LOSS HIT TEMA!")
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and current_price > self.current_ohlc.tema:
-        #     logger.info("STOP LOSS HIT TEMA!")
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
-        # if self.divergence == "bullish" and current_price < self.start_price:
-        #     self.close_long_position(current_price, 100)
-        #     self.reset_all()
-        # elif self.divergence == "bearish" and current_price > self.start_price:
-        #     self.close_short_position(current_price, 100)
-        #     self.reset_all()
-
-    def check_price_hit_hard_stop_loss(self, current_price):
-        if self.divergence == "bullish" and current_price < self.hard_stop_loss_price:
-            logger.info("HIT HARD STOP LOSS!")
-            self.close_long_position(current_price, 100)
+        if self.divergence == "bullish" and ohlc.close <= self.stop_loss_price:
+            logger.info(f"HIT STOP LOSS! @ {self.stop_loss_price:.04f}USD")
+            self.close_long_position(ohlc.close, 100)
             self.reset_all()
-        elif self.divergence == "bearish" and current_price > self.hard_stop_loss_price:
-            logger.info("HIT HARD STOP LOSS!")
-            self.close_short_position(current_price, 100)
+        elif self.divergence == "bearish" and ohlc.close >= self.stop_loss_price:
+            logger.info(f"HIT STOP LOSS! @ {self.stop_loss_price:.04f}USD")
+            self.close_short_position(ohlc.close, 100)
             self.reset_all()
-
-    def activate_entry_price_stop_loss(self, current_price):
-        price_diff = current_price - self.start_price
-        percent_diff = price_diff / self.start_price * 100
-
-        if self.divergence == "bullish" and percent_diff > ENTRY_PRICE_STOP_LOSS_PERCENT:
-            logger.info(f"STOP LOSS CHANGED TO ENTRY PRICE {self.start_price:.4f}")
-            self.entry_price_stoploss = True
-        elif self.divergence == "bearish" and percent_diff < -ENTRY_PRICE_STOP_LOSS_PERCENT:
-            logger.info(f"STOP LOSS CHANGED TO ENTRY PRICE {self.start_price:.4f}")
-            self.entry_price_stoploss = True
-
-    def adjust_stop_loss(self, ohlc: Ohlc):
-        if self.divergence == "bullish":
-            self.stop_loss_price = ohlc.lband
-            logger.info(f"STOP LOSS: {self.stop_loss_price:.5f}")
-        elif self.divergence == "bearish":
-            self.stop_loss_price = ohlc.hband
-            logger.info(f"STOP LOSS: {self.stop_loss_price:.5f}")
 
     def reset_all(self):
         self.divergence = None
@@ -412,7 +201,7 @@ class DcaBot:
                f"=======================\n"
                f"{'_id':<15}: {self._id} \n"
                f"{'divergence':<15}: {self.divergence} \n"
-               f"{'Entry price':<15}: {self.start_price} USD\n"
+               f"{'Entry price':<15}: {self.entry_price} USD\n"
                f"{'Coin amount':<15}: {self.coin_amount} \n"
                f"{'Trade bot bal':<15}: {self.trade_bot_balance:.3f} USD\n"
                f"=======================\n")
@@ -503,7 +292,7 @@ class DcaBot:
                f"{'Coin':<15}: {self.coin_amount:.4f}\n"
                f"{'Borrowed':<15}: {self.owed_coin_amount:.2f}\n"
                f"{'Amt To rebuy':<15}: {coin_amount_to_rebuy:.2f} ({amount_of_coin_to_rebuy_in_usdt:.2f} USD)\n"
-               f"{'Entry price':<15}: {self.start_price} USD\n"
+               f"{'Entry price':<15}: {self.entry_price} USD\n"
                f"{'PNL':<15}: {pnl:.4f} USD\n"
                f"{'SHORTED AMT':<15}: {value_to_close_in_stables:.4f} USD\n"
                f"--------------------------\n")
@@ -539,7 +328,7 @@ class DcaBot:
                f"{'stables_amt_in_long':<15}: {value_to_close_in_stables:.2f}\n"
                f"{'Amt To sell':<15}: {coin_amount_to_sell:.2f} ({amount_of_coin_to_sell_in_usdt:.2f} USD)\n"
                f"{'PNL':<15}: {pnl:.4f} USD\n"
-               f"{'Entry price':<15}: {self.start_price} USD\n"
+               f"{'Entry price':<15}: {self.entry_price} USD\n"
                f"----------------------------\n")
         logger.info(msg)
         telegram_bot.send_message(message=msg)
@@ -589,6 +378,9 @@ class DcaBot:
             if EExchange.CANDLESTICK_EVENT in ee._events and self.on_candlestick_event in ee._events[
                 EExchange.CANDLESTICK_EVENT]:
                 ee.remove_listener(EExchange.CANDLESTICK_EVENT, self.on_candlestick_event)
+            if Trade.COMPLETE_CANDLESTICK_EVENT in ee._events and self.on_complete_candlestick_event in ee._events[
+                Trade.COMPLETE_CANDLESTICK_EVENT]:
+                ee.remove_listener(Trade.COMPLETE_CANDLESTICK_EVENT, self.on_complete_candlestick_event)
         except Exception as ex:
             logger.error(f"remove_all_listeners() failed...\n"
                          f"{ex}")
@@ -599,7 +391,7 @@ class DcaBot:
 
 async def main():
     telegram_bot.start_bot()
-    DcaBot(f"A0001", divergence="bearish", start_price=1.3878, date=datetime.now())
+    DcaBot(f"A0001", divergence="bearish", date=datetime.now())
 
 
 if __name__ == '__main__':

@@ -12,7 +12,7 @@ from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick
 from service.dca_bot import DcaBot
 from service.logging import setup_logging, controller_logger as logger
-from service.signal_bot import SignalBot
+from service.signal_bot5 import SignalBot
 from service.telegram_bot import telegram_bot
 from settings import MODE, SYMBOL, INTERVAL, IS_PAPER_TRADING, MAX_CONCURRENT_TRADE, TRADE_LEVERAGE
 from utils.events import ESignal, ee, Trade, TelegramEventType
@@ -97,12 +97,12 @@ class Controller:
                 for dca_bot in self.dca_bots:
                     _id = dca_bot.process_candlestick(candlestick)
 
-                divergence_result = self.signal_bot.candle_incoming(candlestick)
-                if isinstance(divergence_result, dict):
-                    self.on_divergence(divergence_result)
+                # divergence_result = self.signal_bot.candle_incoming(candlestick)
+                # if isinstance(divergence_result, dict):
+                #     self.on_divergence(divergence_result)
 
-                # if self.check_safe_resample_5m(candlestick):
-                #     self.resample_candle_5m(self.list_5m)
+                if self.check_safe_resample_5m(candlestick):
+                    self.resample_candle_5m(self.list_5m)
 
                 # if self.check_safe_resample_15m(candlestick):
                 #     self.resample_candle_15m(self.list_15m)
@@ -121,7 +121,7 @@ class Controller:
         return True if len(self.list_15m) == 15 else False
 
     def resample_candle_15m(self, candles: List[ICandlestick]):
-        ohlc = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'}
+        ohlc = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum', 'quoteAssetVolume': 'sum'}
         df = pd.DataFrame(candles)
         df['openTime'] = pd.to_datetime(df['openTime'] / 1000, unit='s')
         df = df.resample(rule='15Min', on='openTime').apply(ohlc)
@@ -142,7 +142,7 @@ class Controller:
         return True if len(self.list_5m) == 5 else False
 
     def resample_candle_5m(self, candles: List[ICandlestick]):
-        ohlc = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last'}
+        ohlc = {'open': 'first', 'high': 'max', 'low': 'min', 'close': 'last', 'volume': 'sum', 'quoteAssetVolume': 'sum'}
         df = pd.DataFrame(candles)
         df['openTime'] = pd.to_datetime(df['openTime'] / 1000, unit='s')
         df = df.resample(rule='5Min', on='openTime').apply(ohlc)

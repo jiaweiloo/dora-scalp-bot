@@ -120,158 +120,53 @@ class SignalBot(metaclass=Singleton):
         if len(self.candlestick_list) < data_len:
             return result
 
-        zigzag_indicator = SignalBot.check_zigzag_pattern(self.candlestick_list[-3:])
-        valid_rsi_target = SignalBot.check_rsi_target(zigzag_indicator, prev_ohlc)
-        self.invalidate_expired_peaktrough(prev_ohlc)
-        self.check_divergence(zigzag_indicator, prev_ohlc, self.last_peak, self.last_trough, valid_rsi_target)
+        self.check_rsi_oversold_overbought(ohlc)
+        result = self.check_divergence(ohlc)
         self.adjust_p0(ohlc)
-        result = self.safety_check(ohlc)
-        # After ending only save the current peak/trough and last peak/trough
-        if valid_rsi_target:
-            if zigzag_indicator == 'peak':
-                self.last_peak = prev_ohlc
-            elif zigzag_indicator == 'trough':
-                self.last_trough = prev_ohlc
         return result
 
+    def check_rsi_oversold_overbought(self, ohlc: Ohlc):
+        # if ohlc.rsi >= 70 and self.divergence is None and self.divergence != 'bearish':
+        #     self.divergence = 'bearish'
+        #     logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} {self.divergence} formed")
+        # elif ohlc.rsi <= 30 and self.divergence is None and self.divergence != 'bullish':
+        #     self.divergence = 'bullish'
+        #     logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} {self.divergence} formed")
 
-    @classmethod
-    def check_zigzag_pattern(cls, data: List[Ohlc]) -> ZigzagIndicator:
-        """Find peak/trough from a chart data"""
-        assert len(data) >= 3
+        if ohlc.rsi >= 70 and self.divergence != 'bearish':
+            self.divergence = 'bearish'
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} {self.divergence} formed")
+        elif ohlc.rsi <= 30 and self.divergence != 'bullish':
+            self.divergence = 'bullish'
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} {self.divergence} formed")
 
-        # Check if peak/trough with last 3 item
-        peaks, _ = find_peaks([obj.rsi for obj in data[-3:]])
-        if len(peaks) > 0:
-            return 'peak'
-        troughs, _ = find_peaks(-pd.Series([obj.rsi for obj in data[-3:]]))
-        if len(troughs) > 0:
-            return 'trough'
-        return None
-
-    @classmethod
-    def check_rsi_target(cls, zigzag_indicator: ZigzagIndicator, prev_ohlc: Ohlc):
-        """Check if RSI target has been hit"""
-        valid_rsi_target = False
-        if zigzag_indicator == 'peak' and prev_ohlc.rsi >= 70:
-            valid_rsi_target = True
-        if zigzag_indicator == 'trough' and prev_ohlc.rsi <= 30:
-            valid_rsi_target = True
-        return valid_rsi_target
-
-    def invalidate_expired_peaktrough(self, prev_ohlc: Ohlc):
-        """ Invalidate peak and trough after last peak trough is more than 1 hours """
-        if self.last_peak is not None and prev_ohlc.date - timedelta(minutes=12) > self.last_peak.date:
-            self.last_peak = None
-            self.is_safe_last_peak = False
-        if self.last_trough is not None and prev_ohlc.date - timedelta(minutes=12) > self.last_trough.date:
-            self.last_trough = None
-            self.is_safe_last_trough = False
-
-    def check_divergence(self, zigzag_indicator: ZigzagIndicator, prev_ohlc: Ohlc, last_peak: Ohlc, last_trough: Ohlc,
-                         valid_rsi_target: bool):
-        """Check if there is a bullish or bearish divergence"""
-        divergence, rsi1_ohlc, rsi2_ohlc, point0_price = None, None, None, None
-        if zigzag_indicator == 'peak' and last_peak and valid_rsi_target and prev_ohlc.rsi < last_peak.rsi \
-                and prev_ohlc.high >= last_peak.high:
-            rsi1_ohlc = last_peak
-            rsi2_ohlc = prev_ohlc
-            self.point0_price = prev_ohlc.high
-            divergence = 'bearish'
-            self.hit_opposite_rsi = False
-        elif zigzag_indicator == 'trough' and last_trough and valid_rsi_target and prev_ohlc.rsi > last_trough.rsi \
-                and prev_ohlc.low <= last_trough.low:
-            rsi1_ohlc = last_trough
-            rsi2_ohlc = prev_ohlc
-            self.point0_price = prev_ohlc.low
-            divergence = 'bullish'
-            self.hit_opposite_rsi = False
-
-        if divergence is not None:
-            self.divergence_counter += 1
-            self.divergence = divergence
-            msg = (f"{rsi2_ohlc.date}\n"
-                   f"{divergence} divergence\n"
-                   f"TARGET 1️⃣: {rsi1_ohlc.rsi:.2f} [{rsi1_ohlc.close:.4f} USD] ({rsi1_ohlc.date:%H:%M})\n"
-                   f"TARGET 2️⃣: {rsi2_ohlc.rsi:.2f} [{self.point0_price:.4f} USD]\n"
-                   f"Divergence count: {self.divergence_counter}")
-            logger.info(msg)
-            telegram_bot.send_message(message=msg)
-            # divergence_result = {'divergence': self.divergence, 'rsi2': prev_ohlc, 'price': self.point0_price}
-            # if MODE == EMode.PRODUCTION:
-            #     ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
-            # return divergence_result
-
-    def check_is_safe_divergence(self, ohlc: Ohlc):
-        if self.last_peak is not None and ohlc.rsi < 70:
-            self.is_safe_last_peak = True
-        if self.last_trough is not None and ohlc.rsi > 30:
-            self.is_safe_last_trough = True
-
-    def check_is_hit_opposite_rsi(self, ohlc: Ohlc):
-        if self.divergence == "bearish" and ohlc.rsi < 30:
-            logger.info("hit opposite, cancel divergence")
-            self.reset_all()
-        elif self.divergence == "bullish" and ohlc.rsi > 70:
-            logger.info("hit opposite, cancel divergence")
-            self.reset_all()
-
-    def safety_check(self, ohlc: Ohlc) -> Union[Divergence, Any]:
-        """Check if RSI ever goes against the target (30 for bull, 70 for bear)"""
+    def check_divergence(self, ohlc: Ohlc):
         divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
 
-        # and self.candlestick_list[-2].close > ohlc.ema
-        price_diff = ohlc.close - ohlc.ema_slow
-        percent_diff = abs(price_diff / ohlc.close * 100)
-
         if self.divergence == "bearish" and ohlc.ema_fast < ohlc.ema_slow:
-
-            # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
-            #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
-            #     self.reset_all()
-            #     return
-            # if percent_diff > 1:
-            #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
-            #     self.reset_all()
-            #     return
-
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
-            logger.info(
-                f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} < ema21 {ohlc.ema_slow:.4f}")
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} "
+                        f"EMA fast crossed, fast: {ohlc.ema_fast:.05f} < slow {ohlc.ema_slow:.05f} {self.divergence}")
             self.reset_all()
             return divergence_result
         elif self.divergence == "bullish" and ohlc.ema_fast > ohlc.ema_slow:
-
-            # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
-            #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
-            #     self.reset_all()
-            #     return
-            # if percent_diff > 1:
-            #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
-            #     self.reset_all()
-            #     return
-
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
-            logger.info(
-                f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} > ema21 {ohlc.ema_slow:.4f}")
+            logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} "
+                        f"EMA fast crossed, fast: {ohlc.ema_fast:.05f} > slow {ohlc.ema_slow:.05f} {self.divergence}")
             self.reset_all()
             return divergence_result
 
     def adjust_p0(self, ohlc: Ohlc):
         if self.divergence == "bearish" and ohlc.high > self.point0_price:
             self.point0_price = ohlc.high
-            logger.info(f"NEW STOP LOSS {self.point0_price:.4f}")
         elif self.divergence == "bullish" and ohlc.low < self.point0_price:
             self.point0_price = ohlc.low
-            logger.info(f"NEW STOP LOSS {self.point0_price:.4f}")
 
     def reset_all(self):
-        self.point0_price = 0
         self.divergence = None
-        self.is_safe_last_peak = False
-        self.is_safe_last_trough = False
+        self.point0_price = 0
 
     def stream_candles(self, timestamp, timeout_in_sec=0):
         retry_limit = 3
