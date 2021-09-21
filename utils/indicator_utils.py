@@ -1,5 +1,7 @@
 from typing import List
 
+from ta.momentum import RSIIndicator
+from ta.trend import EMAIndicator
 from ta.volatility import BollingerBands, AverageTrueRange
 from ta.volume import volume_weighted_average_price
 
@@ -9,8 +11,22 @@ import pandas as pd
 from service.logging import indicator_util_logger as logger
 
 
-def get_bollinger_band(data: List[Ohlc], data_len, window=20):
+def get_latest_rsi(data: List[Ohlc], data_len, window) -> int:
     """Calculate RSI from a pandas Series and return the latest RSI"""
+    close_price_list = pd.Series([obj.close for obj in data[-data_len:]])
+    rsi_list = RSIIndicator(close=close_price_list, window=window).rsi()
+    return rsi_list.iloc[-1]
+
+
+def get_latest_ema(data: List[Ohlc], data_len, window=50):
+    """Calculate DEMA from a pandas Series and return the latest EMA"""
+    close_price_list = pd.Series([obj.close for obj in data[-data_len:]])
+    ema_list = EMAIndicator(close=close_price_list, window=window).ema_indicator()
+    return ema_list.iloc[-1]
+
+
+def get_bollinger_band(data: List[Ohlc], data_len, window=20):
+    """Calculate BOLLINGER BAND from a pandas Series"""
     close_price_list = pd.Series([obj.close for obj in data[-data_len:]])
     indicator_bb = BollingerBands(close=close_price_list, window=window, window_dev=2)
 

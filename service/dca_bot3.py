@@ -215,11 +215,11 @@ class DcaBot:
             else:
                 self.stop_loss_timeout_candles = 0
 
-            if ohlc.close < ohlc.ema and (
+            if ohlc.close < ohlc.ema_slow and (
                     self.current_position_on_ema is None or self.current_position_on_ema == 'above'):
                 self.current_position_on_ema = 'below'
                 self.reverse_ema_counter += 1
-            elif ohlc.close > ohlc.ema:
+            elif ohlc.close > ohlc.ema_slow:
                 self.current_position_on_ema = 'above'
 
             # if ohlc.close < ohlc.ema and self.reverse_ema_counter >= REVERSE_EMA_COUNTER_LIMIT:
@@ -245,10 +245,10 @@ class DcaBot:
             else:
                 self.stop_loss_timeout_candles = 0
 
-            if ohlc.close > ohlc.ema and (self.current_position_on_ema is None or self.current_position_on_ema == 'below'):
+            if ohlc.close > ohlc.ema_slow and (self.current_position_on_ema is None or self.current_position_on_ema == 'below'):
                 self.current_position_on_ema = 'above'
                 self.reverse_ema_counter += 1
-            elif ohlc.close < ohlc.ema:
+            elif ohlc.close < ohlc.ema_slow:
                 self.current_position_on_ema = 'below'
 
             # if ohlc.close > ohlc.ema and self.reverse_ema_counter >= REVERSE_EMA_COUNTER_LIMIT:

@@ -6,7 +6,7 @@ class Ohlc(object):
     hband: float = 0
     lband: float = 0
     rsi8: float = 0
-    ema9: float = 0
+    ema_fast: float = 0
     atr: float = 0
     vwap: float = 0
     quoteAssetVolume: float = 0
@@ -29,7 +29,7 @@ class Ohlc(object):
         self.peak = peak
         self.trough = trough
         self.valid_pt = valid_pt
-        self.ema = ema
+        self.ema_slow = ema
         self.dema = dema
         self.tema = tema
         self.quoteAssetVolume=quoteAssetVolume

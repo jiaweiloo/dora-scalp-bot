@@ -196,15 +196,15 @@ class DcaBot:
         if self.divergence == "bullish" and (
                 percent_diff >= TARGET_PROFIT_PERCENTAGE or current_price >= self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
-            if MODE == EMode.TEST:
-                current_price = self.start_price * 1.005
+            # if MODE == EMode.TEST:
+            #     current_price = self.start_price * 1.005
             self.close_long_position(current_price, 100)
             self.reset_all()
         elif self.divergence == "bearish" and (
                 percent_diff <= -TARGET_PROFIT_PERCENTAGE or current_price <= self.take_profit_price):
             logger.info(f"TP: {price_diff=:.5f} {percent_diff=:.5f}")
-            if MODE == EMode.TEST:
-                current_price = self.start_price * 0.995
+            # if MODE == EMode.TEST:
+            #     current_price = self.start_price * 0.995
             self.close_short_position(current_price, 100)
             self.reset_all()
         #
@@ -248,11 +248,11 @@ class DcaBot:
                 self.close_long_position(ohlc.close, 100)
                 self.reset_all()
 
-            if ohlc.close < ohlc.ema and (
+            if ohlc.close < ohlc.ema_slow and (
                     self.current_position_on_ema is None or self.current_position_on_ema == 'above'):
                 self.current_position_on_ema = 'below'
                 self.reverse_ema_counter += 1
-            elif ohlc.close > ohlc.ema:
+            elif ohlc.close > ohlc.ema_slow:
                 self.current_position_on_ema = 'above'
 
 
@@ -284,10 +284,10 @@ class DcaBot:
                 self.close_short_position(ohlc.close, 100)
                 self.reset_all()
 
-            if ohlc.close > ohlc.ema and (self.current_position_on_ema is None or self.current_position_on_ema == 'below'):
+            if ohlc.close > ohlc.ema_slow and (self.current_position_on_ema is None or self.current_position_on_ema == 'below'):
                 self.current_position_on_ema = 'above'
                 self.reverse_ema_counter += 1
-            elif ohlc.close < ohlc.ema:
+            elif ohlc.close < ohlc.ema_slow:
                 self.current_position_on_ema = 'below'
 
             # if ohlc.close > ohlc.ema and self.reverse_ema_counter >= REVERSE_EMA_COUNTER_LIMIT:

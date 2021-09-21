@@ -104,8 +104,8 @@ class SignalBot(metaclass=Singleton):
         if len(self.candlestick_list) >= window:
             prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
-            ohlc.ema9 = self.get_latest_ema(self.candlestick_list, data_len, window=10)
-            ohlc.ema = self.get_latest_ema(self.candlestick_list, data_len, window=20)
+            ohlc.ema_fast = self.get_latest_ema(self.candlestick_list, data_len, window=10)
+            ohlc.ema_slow = self.get_latest_ema(self.candlestick_list, data_len, window=20)
             # bb_result = get_bollinger_band(self.candlestick_list, data_len=28)
             # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
             # ohlc.atr = get_avg_true_range(self.candlestick_list, data_len=42)
@@ -114,7 +114,7 @@ class SignalBot(metaclass=Singleton):
 
             if MODE == EMode.PRODUCTION:
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close:.04f} RSI: {ohlc.rsi:.04f} "
-                            f"EMA: {ohlc.ema:.05f}")
+                            f"EMA: {ohlc.ema_slow:.05f}")
 
             # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close} RSI: {ohlc.rsi:.4f} "
             #             f"EMA 60: {ohlc.ema:.5f} ema9 {ohlc.ema9:.5f}")
@@ -151,14 +151,14 @@ class SignalBot(metaclass=Singleton):
         if len(self.candlestick_htf_list) >= window:
             # ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_htf_list, data_len, window=21)
             # ohlc.ema20 = self.get_latest_ema(self.candlestick_htf_list, data_len, window=20)
-            ohlc.ema = self.get_latest_ema(self.candlestick_htf_list, data_len, window=30)
+            ohlc.ema_slow = self.get_latest_ema(self.candlestick_htf_list, data_len, window=30)
             # bb_result = get_bollinger_band(self.candlestick_htf_list, data_len=28)
             # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
             # ohlc.atr = get_avg_true_range(self.candlestick_htf_list, data_len=42)
 
             self.candlestick_htf_list[-1] = ohlc
             if MODE == EMode.PRODUCTION:
-                logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema:.4f}")
+                logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema_slow:.4f}")
             # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema:.4f}")
 
     @classmethod
@@ -260,17 +260,13 @@ class SignalBot(metaclass=Singleton):
         divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
 
         # and self.candlestick_list[-2].close > ohlc.ema
-        price_diff = ohlc.close - ohlc.ema
+        price_diff = ohlc.close - ohlc.ema_slow
         percent_diff = abs(price_diff / ohlc.close * 100)
 
-        price_diff_fr_sl = ohlc.close - self.point0_price
-        percent_diff_fr_sl = abs(price_diff_fr_sl / ohlc.close * 100)
 
-        if self.divergence == "bearish" and ohlc.ema9 < ohlc.ema:
-            if percent_diff_fr_sl > IGNORE_SIGNAL_PERCENTAGE:
-                logger.info("PRICE DUMP HARD, DROP SIGNAL")
-                self.reset_all()
-                return
+
+        if self.divergence == "bearish" and ohlc.ema_fast < ohlc.ema_slow:
+
             # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
@@ -283,14 +279,11 @@ class SignalBot(metaclass=Singleton):
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(
-                f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} < ema21 {ohlc.ema:.4f}")
+                f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} < ema21 {ohlc.ema_slow:.4f}")
             self.reset_all()
             return divergence_result
-        elif self.divergence == "bullish" and ohlc.ema9 > ohlc.ema:
-            if percent_diff_fr_sl > IGNORE_SIGNAL_PERCENTAGE:
-                logger.info("PRICE PUMP HARD, DROP SIGNAL")
-                self.reset_all()
-                return
+        elif self.divergence == "bullish" and ohlc.ema_fast > ohlc.ema_slow:
+
             # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
@@ -303,7 +296,7 @@ class SignalBot(metaclass=Singleton):
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(
-                f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} > ema21 {ohlc.ema:.4f}")
+                f"{ohlc.date:%Y-%m-%d %H:%M:%S} Price crossed EMA, close: {ohlc.close:.4f} > ema21 {ohlc.ema_slow:.4f}")
             self.reset_all()
             return divergence_result
 
