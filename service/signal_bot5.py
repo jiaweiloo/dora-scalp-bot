@@ -105,7 +105,7 @@ class SignalBot(metaclass=Singleton):
             prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
             ohlc.ema_fast = self.get_latest_ema(self.candlestick_list, data_len, window=10)
-            ohlc.ema_slow = self.get_latest_ema(self.candlestick_list, data_len, window=20)
+            ohlc.ema_slow = self.get_latest_ema(self.candlestick_list, data_len, window=50)
             # bb_result = get_bollinger_band(self.candlestick_list, data_len=28)
             # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
             # ohlc.atr = get_avg_true_range(self.candlestick_list, data_len=42)
@@ -261,17 +261,25 @@ class SignalBot(metaclass=Singleton):
 
         # and self.candlestick_list[-2].close > ohlc.ema
         price_diff = ohlc.close - ohlc.ema_slow
-        percent_diff = abs(price_diff / ohlc.close * 100)
+        percent_diff = abs(price_diff / ohlc.ema_slow * 100)
 
+        price_diff_p0 = ohlc.close - self.point0_price
+        if self.point0_price != 0:
+            percent_diff_p0 = abs(price_diff_p0 / self.point0_price * 100)
+        else:
+            percent_diff_p0 = 0
 
 
         if self.divergence == "bearish" and ohlc.ema_fast < ohlc.ema_slow:
-
+            if ohlc.close > ohlc.open:
+                logger.info("CANDLE IS GREEN, CANCEL SIGNAL")
+                self.reset_all()
+                return
             # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
             #     return
-            # if percent_diff > 1:
+            # if percent_diff_p0 > 1:
             #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
             #     self.reset_all()
             #     return
@@ -283,12 +291,15 @@ class SignalBot(metaclass=Singleton):
             self.reset_all()
             return divergence_result
         elif self.divergence == "bullish" and ohlc.ema_fast > ohlc.ema_slow:
-
+            if ohlc.open > ohlc.close:
+                logger.info("CANDLE IS RED, CANCEL SIGNAL")
+                self.reset_all()
+                return
             # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
             #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
             #     self.reset_all()
             #     return
-            # if percent_diff > 1:
+            # if percent_diff_p0 > 1:
             #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
             #     self.reset_all()
             #     return
