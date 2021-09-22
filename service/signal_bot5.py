@@ -52,11 +52,19 @@ class SignalBot(metaclass=Singleton):
     def __init__(self, origin):
         logger.info(f'START SIGNAL_BOT5 from {origin} interval: {INTERVAL}')
         ee.on(TelegramEventType.STATS, self.stats_requested)
+        if MODE == EMode.PRODUCTION:
+            self.prefetch_candlesticks()
         ee.on(EExchange.CANDLESTICK_EVENT, self.on_candlestick_event)
-        self.run()
+
+    def prefetch_candlesticks(self):
+        now_in_ms = time_now_in_ms()
+        interval_in_ms = self.interval_in_ms()
+        num_complete_candles = 251  # To calculate RSI
+        logger.info(F"PRE-FEED CANDLESTICKS: {num_complete_candles}")
+        start_time = now_in_ms - (now_in_ms % interval_in_ms) - (interval_in_ms * num_complete_candles)
+        self.stream_candles(timestamp=start_time)
 
     def on_candlestick_event(self, i_candlestick_event: ICandlestickEvent):
-
         candlestick = i_candlestick_event['data']
         start_time = datetime.fromtimestamp(candlestick['startTime'] / 1000, tz=pytz.UTC)
         if self.last_candlestick is None:
@@ -79,14 +87,6 @@ class SignalBot(metaclass=Singleton):
 
         self.last_start_date = start_time
         self.last_candlestick = candlestick
-
-    def run(self):
-        now_in_ms = time_now_in_ms()
-        interval_in_ms = self.interval_in_ms()
-        num_complete_candles = 251  # To calculate RSI
-        logger.info(F"PRE-FEED CANDLESTICKS: {num_complete_candles}")
-        start_time = now_in_ms - (now_in_ms % interval_in_ms) - (interval_in_ms * num_complete_candles)
-        self.stream_candles(timestamp=start_time)
 
     def candle_incoming(self, candle: Optional[ICandlestick], ohlc: Ohlc = None):
         """Process trade data by bigger row"""
@@ -392,7 +392,7 @@ async def main():
     setup_logging()
 
     signal_bot = SignalBot(origin="signal_bot")
-    await signal_bot.run()
+    await signal_bot.prefetch_candlesticks()
 
 
 if __name__ == '__main__':
