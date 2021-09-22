@@ -1,6 +1,7 @@
 """Signal bot class"""
 import asyncio
 from datetime import datetime, timedelta
+from time import sleep
 from typing import Literal, Optional, List, Any, Union
 
 import pandas as pd
@@ -67,7 +68,7 @@ class SignalBot(metaclass=Singleton):
                 retry_limit -= 1
             if retry_limit <= 0 or len(candlesticks) >= 2:
                 break
-            asyncio.sleep(5)
+            sleep(5)
 
         chart_data: List[Ohlc] = []
         if len(self.candlestick_list) <= 0:
