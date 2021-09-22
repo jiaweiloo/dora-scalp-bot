@@ -14,7 +14,7 @@ from dotenv import load_dotenv
 from classes.ohlc import Ohlc
 from custom_types.controller_type import EMode
 from custom_types.exchange_type import ICandlestick, ICandlestickEvent, ICandlestickEventData, IAccountTrade
-from custom_types.trade_type import ICalcFee, IFeeCalc
+from custom_types.trade_type import ICalcFee, IFeeItems
 from database.dora_trade_transaction import DoraTradeTransaction
 from service.exchange import exchange
 from service.logging import dca_bot_logger as logger
@@ -22,7 +22,7 @@ from service.telegram_bot import telegram_bot
 from service.wallet import wallet
 from settings import IS_PAPER_TRADING, SYMBOL, INTERVAL, MODE
 from utils.events import ee, Trade, TelegramEventType, EExchange
-from utils.general_utils import time_now_in_ms
+from utils.candlestick_utils import time_now_in_ms
 
 load_dotenv()
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
@@ -45,7 +45,7 @@ class DcaBot:
     current_ohlc: Ohlc = None
     candlestick_list: List[Ohlc] = []
 
-    fee_items: IFeeCalc = {'trade_start_time': None, 'order_ids': None}
+    fee_items: IFeeItems = {'trade_start_time': None, 'order_ids': None}
 
     # Test wallet part
     trade_bot_balance = 600
@@ -365,12 +365,6 @@ class DcaBot:
             fee_in_usdt = mark_price_obj['markPrice'] * fee
         return {'asset': asset, 'fee': fee, 'fee_in_usdt': fee_in_usdt}
 
-    def get_id(self):
-        return self._id
-
-    def __repr__(self):
-        return self._id
-
     def remove_all_listeners(self):
         try:
             if TelegramEventType.STATS in ee._events and self.stats_requested in ee._events[TelegramEventType.STATS]:
@@ -384,6 +378,9 @@ class DcaBot:
         except Exception as ex:
             logger.error(f"remove_all_listeners() failed...\n"
                          f"{ex}")
+
+    def __repr__(self):
+        return self._id
 
     def __del__(self):
         logger.info(f"dca_bot {self._id} deleted")

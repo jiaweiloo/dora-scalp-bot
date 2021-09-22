@@ -20,7 +20,7 @@ from service.telegram_bot import telegram_bot
 from settings import MODE, INTERVAL
 from utils.chart_utils import CANDLESTICK_INTERVAL_MAP
 from utils.events import ee, ESignal, TelegramEventType, Trade, EExchange
-from utils.general_utils import time_now_in_ms
+from utils.candlestick_utils import time_now_in_ms
 from utils.indicator_utils import get_bollinger_band, get_avg_true_range, get_vwap, get_latest_rsi, get_latest_ema
 
 ZigzagIndicator = Optional[Literal['peak', 'trough']]
