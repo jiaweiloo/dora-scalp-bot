@@ -50,31 +50,9 @@ class SignalBot(metaclass=Singleton):
     def __init__(self, origin):
         logger.info(f'START SIGNAL_BOT5 from {origin} interval: {INTERVAL}')
         ee.on(TelegramEventType.STATS, self.stats_requested)
+        if MODE == EMode.PRODUCTION:
+            self.prefetch_candlesticks()
         ee.on(EExchange.CANDLESTICK_EVENT, self.on_candlestick_event)
-        self.prefetch_candlesticks()
-
-    def on_candlestick_event(self, i_candlestick_event: ICandlestickEvent):
-        candlestick = i_candlestick_event['data']
-        start_time = datetime.fromtimestamp(candlestick['startTime'] / 1000, tz=pytz.UTC)
-        if self.last_candlestick is None:
-            self.last_start_date = start_time
-            self.last_candlestick = candlestick
-            logger.info(f"{self.last_start_date:%Y-%m-%d %H:%M:%S}: {self.last_candlestick['close']} "
-                        f"(incomplete first streamed)")
-
-        if self.last_start_date != start_time and self.last_candlestick is not None:
-            ohlc = Ohlc(unix=self.last_candlestick['startTime'],
-                        date=datetime.fromtimestamp(self.last_candlestick['startTime'] / 1000, tz=pytz.UTC),
-                        open=float(self.last_candlestick['open']),
-                        high=float(self.last_candlestick['high']),
-                        low=float(self.last_candlestick['low']),
-                        close=float(self.last_candlestick['close']),
-                        volume_usdt=float(self.last_candlestick['volume']),
-                        quoteAssetVolume=float(self.last_candlestick['quoteAssetVolume']))
-            self.candle_incoming(candle=None, ohlc=ohlc)
-
-        self.last_start_date = start_time
-        self.last_candlestick = candlestick
 
     def prefetch_candlesticks(self):
         now_in_ms = time_now_in_ms()
@@ -112,6 +90,29 @@ class SignalBot(metaclass=Singleton):
             # Caught up to the latest candlestick, listen to real-time data
             self.candle_incoming(candlesticks[-2])
             return latest_complete_close_time_in_ms, latest_incomplete_close_time_in_ms
+
+    def on_candlestick_event(self, i_candlestick_event: ICandlestickEvent):
+        candlestick = i_candlestick_event['data']
+        start_time = datetime.fromtimestamp(candlestick['startTime'] / 1000, tz=pytz.UTC)
+        if self.last_candlestick is None:
+            self.last_start_date = start_time
+            self.last_candlestick = candlestick
+            logger.info(f"{self.last_start_date:%Y-%m-%d %H:%M:%S}: {self.last_candlestick['close']} "
+                        f"(incomplete first streamed)")
+
+        if self.last_start_date != start_time and self.last_candlestick is not None:
+            ohlc = Ohlc(unix=self.last_candlestick['startTime'],
+                        date=datetime.fromtimestamp(self.last_candlestick['startTime'] / 1000, tz=pytz.UTC),
+                        open=float(self.last_candlestick['open']),
+                        high=float(self.last_candlestick['high']),
+                        low=float(self.last_candlestick['low']),
+                        close=float(self.last_candlestick['close']),
+                        volume_usdt=float(self.last_candlestick['volume']),
+                        quoteAssetVolume=float(self.last_candlestick['quoteAssetVolume']))
+            self.candle_incoming(candle=None, ohlc=ohlc)
+
+        self.last_start_date = start_time
+        self.last_candlestick = candlestick
 
     def candle_incoming(self, candle: Optional[ICandlestick], ohlc: Ohlc = None):
         """Process trade data by bigger row"""
