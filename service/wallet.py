@@ -65,7 +65,7 @@ class Wallet(metaclass=Singleton):
 
         final_pnl = TRADE_LEVERAGE * pnl
         if MODE == EMode.TEST:
-            temp_fees = self.overall_wallet_fund * 0.002
+            temp_fees = self.overall_wallet_fund * (0.00016 + 0.00036)
             final_pnl = final_pnl - temp_fees
         logger.info(f"ori pnl {pnl:.4f} * {TRADE_LEVERAGE} = {final_pnl:.4f}")
         self.active_trade -= 1

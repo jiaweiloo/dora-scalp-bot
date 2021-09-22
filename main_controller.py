@@ -78,8 +78,8 @@ class Controller:
             # df = df[(df["date"] >= datetime(2021, 1, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 4, 1, 0, 00)) & (df["date"] < datetime(2021, 4, 30, 23, 0))]
             # df = df[(df["date"] >= datetime(2021, 5, 1, 0, 00)) & (df["date"] < datetime(2021, 5, 30, 23, 0))]
-            # df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
-            df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
+            df = df[(df["date"] >= datetime(2021, 8, 1, 0, 00)) & (df["date"] < datetime(2021, 8, 30, 23, 0))]
+            # df = df[(df["date"] >= datetime(2021, 9, 1, 0, 00)) & (df["date"] < datetime(2021, 9, 30, 0, 0))]
 
             print(f"{date:%Y-%m-%d %H:%M:%S} loading data... number of rows: {len(df.index)}")
             df_dict = df.to_dict('records')
@@ -97,12 +97,12 @@ class Controller:
                 for dca_bot in self.dca_bots:
                     _id = dca_bot.process_candlestick(candlestick)
 
-                # divergence_result = self.signal_bot.candle_incoming(candlestick)
-                # if isinstance(divergence_result, dict):
-                #     self.on_divergence(divergence_result)
+                divergence_result = self.signal_bot.candle_incoming(candlestick)
+                if isinstance(divergence_result, dict):
+                    self.on_divergence(divergence_result)
 
-                if self.check_safe_resample_5m(candlestick):
-                    self.resample_candle_5m(self.list_5m)
+                # if self.check_safe_resample_5m(candlestick):
+                #     self.resample_candle_5m(self.list_5m)
 
                 # if self.check_safe_resample_15m(candlestick):
                 #     self.resample_candle_15m(self.list_15m)
