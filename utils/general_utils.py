@@ -1,13 +1,8 @@
 import codecs
-from datetime import datetime
 
 from database.dora_trade_transaction import DoraTradeTransaction
 from settings import BASE_DIR
 from utils.path_utils import build_path
-
-
-def time_now_in_ms():
-    return int(datetime.now().timestamp() * (10 ** 3))
 
 
 def init_backtest_file():
@@ -25,4 +20,3 @@ def write_to_csv(txn: DoraTradeTransaction):
                f"{txn.overall_fund},{txn.txn_type},{txn.txn_interval}"
         f.write(line)
         f.write('\n')
-

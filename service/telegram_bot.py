@@ -7,7 +7,7 @@ from typing import Set
 
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import *
+from telegram.ext import Updater, Dispatcher, CommandHandler, MessageHandler, Filters, CallbackContext
 
 from classes.singleton import Singleton
 from custom_types.controller_type import EMode
@@ -18,6 +18,7 @@ from utils.events import ee, TelegramEventType
 load_dotenv()
 TELEGRAM_API_KEY = os.getenv('TELEGRAM_API_KEY')
 DEFAULT_TELEGRAM_NOTIFICATION_ID = os.getenv('DEFAULT_TELEGRAM_NOTIFICATION_ID')
+
 
 class TelegramBot(metaclass=Singleton):
     dispatcher: Dispatcher

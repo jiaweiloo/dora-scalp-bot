@@ -10,7 +10,7 @@ class IExtendedTrade(TypedDict):
     sl_fib: Union[int, str]
 
 
-class IFeeCalc(TypedDict):
+class IFeeItems(TypedDict):
     trade_start_time: int
     order_ids: List[str]
 

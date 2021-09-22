@@ -85,7 +85,7 @@ def gen_candlestick_csv_data(interval: CandlestickInterval, start_date: datetime
             start_timestamp += interval_in_ms(interval)
         elif start_timestamp >= end_timestamp:
             break
-        print(f"sleeping for 1s... {datetime.fromtimestamp(start_timestamp/1000):%Y-%m-%d %H:%M:%S}")
+        print(f"sleeping for 1s... {datetime.fromtimestamp(start_timestamp / 1000):%Y-%m-%d %H:%M:%S}")
         sleep(1)
     print(f'done generating csv file:\n{write_file_path}')
 

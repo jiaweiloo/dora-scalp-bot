@@ -11,7 +11,6 @@ websocket-client==1.1.1
 setuptools==57.4.0
 python-telegram-bot==13.7
 SQLAlchemy==1.4.22
-telegram==0.0.1
 tzlocal==2.1
 pytz~=2021.1
 fastapi~=0.68.0
