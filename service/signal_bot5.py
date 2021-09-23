@@ -1,7 +1,7 @@
 """Signal bot class"""
 import asyncio
 from datetime import datetime, timedelta
-from time import sleep
+from operator import itemgetter
 from typing import Literal, Optional, List, Any, Union
 
 import pandas as pd
@@ -18,8 +18,10 @@ from service.exchange import exchange
 from service.logging import setup_logging, signal_bot_logger as logger
 from service.telegram_bot import telegram_bot
 from settings import MODE, INTERVAL
-from utils.candlestick_utils import interval_in_ms, get_latest_complete_candlestick_start_time, time_now_in_ms
+from utils.chart_utils import CANDLESTICK_INTERVAL_MAP
 from utils.events import ee, ESignal, TelegramEventType, Trade, EExchange
+from utils.general_utils import time_now_in_ms
+from utils.indicator_utils import get_bollinger_band, get_avg_true_range, get_vwap
 
 ZigzagIndicator = Optional[Literal['peak', 'trough']]
 Divergence = Optional[Literal['bullish', 'bearish']]
@@ -33,14 +35,13 @@ IGNORE_SIGNAL_PERCENTAGE = 50
 class SignalBot(metaclass=Singleton):
     """Read chart data and indicate trade signals"""
     candlestick_list: List[Ohlc] = []
-
+    candlestick_htf_list: List[Ohlc] = []  # Higher time frame candles
     last_peak: Ohlc = None
     last_trough: Ohlc = None
-    is_safe_last_peak = False
-    is_safe_last_trough = False
-
     divergence: Divergence = None
     point0_price = 0
+    is_safe_last_peak = False
+    is_safe_last_trough = False
 
     hit_opposite_rsi = False
     divergence_counter = 0
@@ -57,40 +58,11 @@ class SignalBot(metaclass=Singleton):
 
     def prefetch_candlesticks(self):
         now_in_ms = time_now_in_ms()
-        _interval_in_ms = interval_in_ms(INTERVAL)
+        interval_in_ms = self.interval_in_ms()
         num_complete_candles = 251  # To calculate RSI
         logger.info(F"PRE-FEED CANDLESTICKS: {num_complete_candles}")
-        start_time = now_in_ms - (now_in_ms % _interval_in_ms) - (_interval_in_ms * num_complete_candles)
-        retry_limit = 3
-        while True:
-            candlesticks = exchange.get_candlestick(interval=INTERVAL, start_time=start_time, limit=CANDLESTICK_LIMIT)
-            if len(candlesticks) < 2:
-                retry_limit -= 1
-            if retry_limit <= 0 or len(candlesticks) >= 2:
-                break
-            sleep(5)
-
-        chart_data: List[Ohlc] = []
-        if len(self.candlestick_list) <= 0:
-            for candle in candlesticks[:-2]:
-                ohlc = Ohlc(unix=candle['openTime'],
-                            date=datetime.fromtimestamp(candle['openTime'] / 1000, tz=pytz.UTC),
-                            open=float(candle['open']), high=float(candle['high']), low=float(candle['low']),
-                            close=float(candle['close']))
-                chart_data.append(ohlc)
-            self.candlestick_list = chart_data
-            logger.info(f"chart data length: {len(self.candlestick_list)}")
-
-        latest_incomplete_close_time_in_ms = candlesticks[-1]['closeTime']
-        latest_complete_close_time_in_ms = candlesticks[-2]['closeTime']
-
-        # Current time is always between the opening and closing time of the latest candlestick. Latest incomplete
-        # candlestick's closing time will always be in the future, so 2nd last candlestick in the list will be
-        # the complete candlestick
-        if get_latest_complete_candlestick_start_time(INTERVAL) == candlesticks[-2]['openTime']:
-            # Caught up to the latest candlestick, listen to real-time data
-            self.candle_incoming(candlesticks[-2])
-            return latest_complete_close_time_in_ms, latest_incomplete_close_time_in_ms
+        start_time = now_in_ms - (now_in_ms % interval_in_ms) - (interval_in_ms * num_complete_candles)
+        self.stream_candles(timestamp=start_time)
 
     def on_candlestick_event(self, i_candlestick_event: ICandlestickEvent):
         candlestick = i_candlestick_event['data']
@@ -102,6 +74,7 @@ class SignalBot(metaclass=Singleton):
                         f"(incomplete first streamed)")
 
         if self.last_start_date != start_time and self.last_candlestick is not None:
+            # logger.info(f"{self.last_start_date:%Y-%m-%d %H:%M:%S}: {self.last_candlestick['close']}")
             ohlc = Ohlc(unix=self.last_candlestick['startTime'],
                         date=datetime.fromtimestamp(self.last_candlestick['startTime'] / 1000, tz=pytz.UTC),
                         open=float(self.last_candlestick['open']),
@@ -122,6 +95,7 @@ class SignalBot(metaclass=Singleton):
                         open=float(candle['open']), high=float(candle['high']), low=float(candle['low']),
                         close=float(candle['close']), volume_usdt=float(candle['volume']),
                         quoteAssetVolume=float(candle['quoteAssetVolume']))
+
         self.candlestick_list.append(ohlc)
         self.candlestick_list = self.candlestick_list[-700:]
         data_len = 350
@@ -131,12 +105,20 @@ class SignalBot(metaclass=Singleton):
             prev_ohlc: Ohlc = self.candlestick_list[-2]
             ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_list, data_len, window=14)
             ohlc.ema_fast = self.get_latest_ema(self.candlestick_list, data_len, window=10)
-            ohlc.ema_slow = self.get_latest_ema(self.candlestick_list, data_len, window=50)
+            ohlc.ema_slow = self.get_latest_ema(self.candlestick_list, data_len, window=20)
+            # bb_result = get_bollinger_band(self.candlestick_list, data_len=28)
+            # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
+            # ohlc.atr = get_avg_true_range(self.candlestick_list, data_len=42)
+            # ohlc.vwap = get_vwap(self.candlestick_list, data_len=14, window=14)
             ee.emit(Trade.COMPLETE_CANDLESTICK_EVENT, ohlc)
 
             if MODE == EMode.PRODUCTION:
                 logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close:.04f} RSI: {ohlc.rsi:.04f} "
                             f"EMA: {ohlc.ema_slow:.05f}")
+
+            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick: {ohlc.close} RSI: {ohlc.rsi:.4f} "
+            #             f"EMA 60: {ohlc.ema:.5f} ema9 {ohlc.ema9:.5f}")
+
             self.candlestick_list[-1] = ohlc
             if len(self.candlestick_list) >= data_len:
                 zigzag_indicator = SignalBot.check_zigzag_pattern(self.candlestick_list[-3:])
@@ -152,6 +134,32 @@ class SignalBot(metaclass=Singleton):
                     elif zigzag_indicator == 'trough':
                         self.last_trough = prev_ohlc
         return result
+
+    def higher_tf_candle_incoming(self, candle: ICandlestick):
+        """Process candlestick by higher time frame"""
+        ohlc = Ohlc(unix=candle['openTime'],
+                    date=datetime.fromtimestamp(candle['openTime'] / 1000, tz=pytz.UTC),
+                    open=float(candle['open']),
+                    high=float(candle['high']),
+                    low=float(candle['low']),
+                    close=float(candle['close']))
+        self.candlestick_htf_list.append(ohlc)
+        self.candlestick_htf_list = self.candlestick_htf_list[-250:]
+        data_len = 250
+        window = 14
+        result = None
+        if len(self.candlestick_htf_list) >= window:
+            # ohlc.rsi = SignalBot.get_latest_rsi(self.candlestick_htf_list, data_len, window=21)
+            # ohlc.ema20 = self.get_latest_ema(self.candlestick_htf_list, data_len, window=20)
+            ohlc.ema_slow = self.get_latest_ema(self.candlestick_htf_list, data_len, window=30)
+            # bb_result = get_bollinger_band(self.candlestick_htf_list, data_len=28)
+            # ohlc.mavg, ohlc.hband, ohlc.lband = itemgetter('mavg', 'hband', 'lband')(bb_result)
+            # ohlc.atr = get_avg_true_range(self.candlestick_htf_list, data_len=42)
+
+            self.candlestick_htf_list[-1] = ohlc
+            if MODE == EMode.PRODUCTION:
+                logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema_slow:.4f}")
+            # logger.info(f"{ohlc.date:%Y-%m-%d %H:%M:%S} candlestick htf: {ohlc.close} EMA: {ohlc.ema:.4f}")
 
     @classmethod
     def get_latest_rsi(cls, data: List[Ohlc], data_len, window) -> int:
@@ -202,8 +210,7 @@ class SignalBot(metaclass=Singleton):
     def check_divergence(self, zigzag_indicator: ZigzagIndicator, prev_ohlc: Ohlc, last_peak: Ohlc, last_trough: Ohlc,
                          valid_rsi_target: bool):
         """Check if there is a bullish or bearish divergence"""
-        divergence: Divergence = None
-        rsi1_ohlc, rsi2_ohlc, point0_price = None, None, None
+        divergence, rsi1_ohlc, rsi2_ohlc, point0_price = None, None, None, None
         if zigzag_indicator == 'peak' and last_peak and valid_rsi_target and prev_ohlc.rsi < last_peak.rsi \
                 and prev_ohlc.high >= last_peak.high:
             rsi1_ohlc = last_peak
@@ -229,6 +236,10 @@ class SignalBot(metaclass=Singleton):
                    f"Divergence count: {self.divergence_counter}")
             logger.info(msg)
             telegram_bot.send_message(message=msg)
+            # divergence_result = {'divergence': self.divergence, 'rsi2': prev_ohlc, 'price': self.point0_price}
+            # if MODE == EMode.PRODUCTION:
+            #     ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
+            # return divergence_result
 
     def check_is_safe_divergence(self, ohlc: Ohlc):
         if self.last_peak is not None and ohlc.rsi < 70:
@@ -248,11 +259,31 @@ class SignalBot(metaclass=Singleton):
         """Check if RSI ever goes against the target (30 for bull, 70 for bear)"""
         divergence_result = {'divergence': self.divergence, 'rsi2': ohlc, 'price': self.point0_price}
 
+        # and self.candlestick_list[-2].close > ohlc.ema
+        price_diff = ohlc.close - ohlc.ema_slow
+        percent_diff = abs(price_diff / ohlc.ema_slow * 100)
+
+        price_diff_p0 = ohlc.close - self.point0_price
+        if self.point0_price != 0:
+            percent_diff_p0 = abs(price_diff_p0 / self.point0_price * 100)
+        else:
+            percent_diff_p0 = 0
+
+
         if self.divergence == "bearish" and ohlc.ema_fast < ohlc.ema_slow:
             if ohlc.close > ohlc.open:
                 logger.info("CANDLE IS GREEN, CANCEL SIGNAL")
                 self.reset_all()
                 return
+            # if self.candlestick_htf_list[-1].close > self.candlestick_htf_list[-1].ema:
+            #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
+            # if percent_diff_p0 > 1:
+            #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
+
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(
@@ -264,6 +295,15 @@ class SignalBot(metaclass=Singleton):
                 logger.info("CANDLE IS RED, CANCEL SIGNAL")
                 self.reset_all()
                 return
+            # if self.candlestick_htf_list[-1].close < self.candlestick_htf_list[-1].ema:
+            #     logger.info("HIGHER TIME FRAME NOT VALID, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
+            # if percent_diff_p0 > 1:
+            #     logger.info("POSSIBLE PUMP AND DUMP, CANCEL SIGNAL")
+            #     self.reset_all()
+            #     return
+
             if MODE == EMode.PRODUCTION:
                 ee.emit(ESignal.DIVERGENCE_FOUND, divergence_result)
             logger.info(
@@ -284,6 +324,50 @@ class SignalBot(metaclass=Singleton):
         self.divergence = None
         self.is_safe_last_peak = False
         self.is_safe_last_trough = False
+
+    def stream_candles(self, timestamp, timeout_in_sec=0):
+        retry_limit = 3
+        while True:
+            candlesticks = exchange.get_candlestick(interval=INTERVAL, start_time=timestamp, limit=CANDLESTICK_LIMIT)
+            if len(candlesticks) < 2:
+                retry_limit -= 1
+            if retry_limit <= 0 or len(candlesticks) >= 2:
+                break
+            asyncio.sleep(5)
+
+        chart_data: List[Ohlc] = []
+        if len(self.candlestick_list) <= 0:
+            for candle in candlesticks[:-2]:
+                ohlc = Ohlc(unix=candle['openTime'],
+                            date=datetime.fromtimestamp(candle['openTime'] / 1000, tz=pytz.UTC),
+                            open=float(candle['open']), high=float(candle['high']), low=float(candle['low']),
+                            close=float(candle['close']))
+                chart_data.append(ohlc)
+            self.candlestick_list = chart_data
+            logger.info(f"chart data length: {len(self.candlestick_list)}")
+
+        latest_incomplete_close_time_in_ms = candlesticks[-1]['closeTime']
+        latest_complete_close_time_in_ms = candlesticks[-2]['closeTime']
+
+        # Current time is always between the opening and closing time of the latest candlestick. Latest incomplete
+        # candlestick's closing time will always be in the future, so 2nd last candlestick in the list will be
+        # the complete candlestick
+        if self.get_latest_complete_candlestick_start_time() == candlesticks[-2]['openTime']:
+            # Caught up to the latest candlestick, listen to real-time data
+            self.candle_incoming(candlesticks[-2])
+            return latest_complete_close_time_in_ms, latest_incomplete_close_time_in_ms
+
+    def get_latest_incomplete_candlestick_start_time(self):
+        return self.get_candlestick_start_time(time_now_in_ms())
+
+    def get_candlestick_start_time(self, timestamp_in_ms):
+        return timestamp_in_ms - (timestamp_in_ms % self.interval_in_ms())
+
+    def interval_in_ms(self):
+        return CANDLESTICK_INTERVAL_MAP[INTERVAL] * (10 ** 3)
+
+    def get_latest_complete_candlestick_start_time(self):
+        return self.get_latest_incomplete_candlestick_start_time() - self.interval_in_ms()
 
     def stats_requested(self, chat_id):
         msg = (f"📊 STATS REQUESTED\n"
@@ -308,7 +392,7 @@ async def main():
     setup_logging()
 
     signal_bot = SignalBot(origin="signal_bot")
-    signal_bot.prefetch_candlesticks()
+    await signal_bot.prefetch_candlesticks()
 
 
 if __name__ == '__main__':
